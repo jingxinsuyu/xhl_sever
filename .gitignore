@@ -1,0 +1,27 @@
+# ===== 敏感配置（含密钥，严禁入库）=====
+# 本地/开发配置
+config.yaml
+# 线上容器配置
+deploy_bundle/config.yaml
+# 部署脚本（内含服务器 SSH 密码）
+deploy.py
+
+# ===== 编译产物 =====
+xhl_sever-linux
+deploy_bundle/xhl_sever-linux
+*.exe
+
+# ===== 运行时数据 =====
+uploads/
+
+# ===== 需求/提示词文档（不入库）=====
+/*.md
+!README.md
+
+# ===== 本地/工具设置 =====
+.claude/settings.local.json
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

@@ -1,0 +1,53 @@
+# 小火龙工具箱后端配置模板
+# 复制为 config.yaml 后填入真实值；含敏感信息，严禁提交到仓库。
+
+server:
+  # HTTP 监听端口
+  port: 8080
+  # 运行模式 debug / release
+  mode: debug
+
+database:
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  password: "CHANGE_ME"
+  dbname: hlong
+  charset: utf8mb4
+  max_open_conns: 50
+  max_idle_conns: 10
+
+redis:
+  host: 127.0.0.1
+  port: 6379
+  password: "CHANGE_ME"
+  db: 0
+
+jwt:
+  # 签名密钥（生产环境务必更换为随机值）
+  secret: "CHANGE_ME"
+  # 后台管理员 token 过期时间（小时）
+  expire_hours: 72
+  # 用户 token 过期时间（小时），8760 = 1 年
+  user_expire_hours: 8760
+
+security:
+  # 每账号每分钟允许登录次数（防撞库）
+  login_rate_limit_per_min: 20
+  # 图形验证码有效期（秒）
+  captcha_expire_seconds: 300
+  # 客户端登录参数签名盐（与客户端保持一致，务必修改）
+  client_sign_salt: "CHANGE_ME"
+  # 客户端登录密码 AES 密钥（必须 16 字节，与客户端保持一致，务必修改）
+  client_aes_key: "CHANGE_ME"
+
+upload:
+  # 上传根目录（相对或绝对路径）
+  dir: uploads
+  # 静态资源对外访问基础地址（容器部署可留空 → 返回 /uploads 相对路径）
+  base_url: ""
+
+super_admin:
+  username: "CHANGE_ME"
+  password: "CHANGE_ME"
+  nickname: "超级管理员"

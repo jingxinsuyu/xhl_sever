@@ -1,0 +1,51 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: xhl-mysql
+    restart: always
+    ports:
+      - "127.0.0.1:3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "0KUN0ZsfXGETUpU0"
+      TZ: Asia/Shanghai
+    volumes:
+      - ./mysql/conf:/etc/mysql/conf.d
+      - ./mysql/data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p0KUN0ZsfXGETUpU0"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: xhl-redis
+    restart: always
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+      - ./redis/data:/data
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "9sRcLHkhLWgKZZsv", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  xhl_sever:
+    build: ./xhl_sever
+    container_name: xhl-sever
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./xhl_sever/config.yaml:/app/config.yaml
+      - ./xhl_sever/web:/app/web
+      - ./xhl_sever/uploads:/app/uploads
