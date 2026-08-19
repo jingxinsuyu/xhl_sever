@@ -351,7 +351,7 @@ func (h *Handler) checkOrBindMachine(user *model.User, projectID string, machine
 	if err == nil {
 		return true, nil // 本设备已绑定
 	}
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, err
 	}
 	// 本设备未绑定：若该项目下已有其他设备绑定 → 拒绝
