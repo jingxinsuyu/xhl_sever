@@ -26,7 +26,7 @@ type UpdateUserStatusRequest struct {
 
 // UnbindUserRequest 管理员解绑用户请求（project_id 为空则解绑全部项目）
 type UnbindUserRequest struct {
-	ProjectID uint64 `json:"project_id"`
+	ProjectID string `json:"project_id"`
 }
 
 // UserListResponse 用户列表项
@@ -176,7 +176,7 @@ type UserBindingInfo struct {
 
 // UserMembershipProject 用户在某项目的会员情况
 type UserMembershipProject struct {
-	ProjectID       uint64            `json:"project_id"`
+	ProjectID       string            `json:"project_id"`
 	ProjectName     string            `json:"project_name"`
 	ExpiresAt       *string           `json:"expires_at"`        // 会员到期时间，无记录为 null
 	HasTime         bool              `json:"has_time"`
@@ -212,7 +212,7 @@ func (h *Handler) GetUserMembership(c *gin.Context) {
 	// 用户在所有项目的会员到期时间
 	var ents []model.UserEntitlement
 	database.DB.Where("user_id = ?", user.ID).Find(&ents)
-	entMap := make(map[uint64]model.UserEntitlement, len(ents))
+	entMap := make(map[string]model.UserEntitlement, len(ents))
 	for _, e := range ents {
 		entMap[e.ProjectID] = e
 	}
@@ -220,7 +220,7 @@ func (h *Handler) GetUserMembership(c *gin.Context) {
 	// 用户在所有项目的绑定情况
 	var bindings []model.UserBinding
 	database.DB.Where("user_id = ?", user.ID).Find(&bindings)
-	bindingMap := make(map[uint64][]model.UserBinding)
+	bindingMap := make(map[string][]model.UserBinding)
 	for _, b := range bindings {
 		bindingMap[b.ProjectID] = append(bindingMap[b.ProjectID], b)
 	}
@@ -257,7 +257,7 @@ func (h *Handler) GetUserMembership(c *gin.Context) {
 
 // ClearUserLoginCountRequest 清零登录次数请求
 type ClearUserLoginCountRequest struct {
-	ProjectID uint64 `json:"project_id"` // 0 表示清零该用户全部项目
+	ProjectID string `json:"project_id"` // 空表示清零该用户全部项目
 }
 
 // ClearUserLoginCount 清零用户今日登录次数【管理员】。
@@ -313,7 +313,7 @@ func (h *Handler) UnbindUser(c *gin.Context) {
 	}
 
 	q := database.DB.Where("user_id = ?", user.ID)
-	if req.ProjectID > 0 {
+	if req.ProjectID != "" {
 		q = q.Where("project_id = ?", req.ProjectID)
 	}
 	if err := q.Delete(&model.UserBinding{}).Error; err != nil {

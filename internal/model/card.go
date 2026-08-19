@@ -11,7 +11,7 @@ const (
 // Card 卡密表
 type Card struct {
 	ID        uint64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	ProjectID uint64     `gorm:"not null;index" json:"project_id"`
+	ProjectID string     `gorm:"not null;size:6;index" json:"project_id"`
 	TypeID    uint64     `gorm:"not null;index" json:"type_id"` // 所属卡密类型 id
 	CDKey     string     `gorm:"column:cdkey;size:64;not null;uniqueIndex" json:"cdkey"`
 	UserID    *uint64    `gorm:"index" json:"user_id"` // 使用人，NULL 未使用

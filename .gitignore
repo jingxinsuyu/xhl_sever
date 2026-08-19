@@ -1,18 +1,19 @@
 # ===== 敏感配置（含密钥，严禁入库）=====
-# 本地/开发配置
+# 本地/开发配置（含容器内挂载的线上配置）
 config.yaml
-# 线上容器配置
-deploy_bundle/config.yaml
 # 部署脚本（内含服务器 SSH 密码）
 deploy.py
 
 # ===== 编译产物 =====
 xhl_sever-linux
-deploy_bundle/xhl_sever-linux
 *.exe
+# 根目录前端构建产物（前端源码在 xhl-admin 仓库，不在此库跟踪）
+/web/
 
 # ===== 运行时数据 =====
 uploads/
+# 迁移快照备份
+project_id_migration_backup_*.json
 
 # ===== 需求/提示词文档（不入库）=====
 /*.md

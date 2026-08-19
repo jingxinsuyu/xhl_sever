@@ -45,6 +45,7 @@ func Init(cfg *config.Database) error {
 		&model.RichTextAd{},
 		&model.CardType{},
 		&model.Card{},
+		&model.CkData{},
 	); err != nil {
 		return fmt.Errorf("自动建表失败: %w", err)
 	}

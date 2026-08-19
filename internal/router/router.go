@@ -47,11 +47,12 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 	// 图形验证码（无需登录）
 	r.GET("/api/captcha", h.GetCaptcha)
 
-	// moonshad 接口（需登录 + 项目权限）
-	r.POST("/api/moonshad", middleware.AuthUser(cfg.JWT.Secret), h.Moonshad)
+	// 百度扫码确认（需登录 + 100001 项目会员，SSE 流式）
+	r.POST("/api/xhl/qrlogin", middleware.AuthUser(cfg.JWT.Secret), h.QrLogin)
 
 	user := r.Group("/api/user")
 	{
+		user.POST("/init", middleware.AuthUser(cfg.JWT.Secret), h.UserInit) // 登录有效性校验
 		user.POST("/register", h.Register)
 		user.POST("/login", h.UserLogin)
 		user.POST("/exchange", h.Exchange) // 兑换按用户名，无需登录
@@ -117,6 +118,10 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 		admin.GET("/cards", middleware.AuthAdmin(cfg.JWT.Secret), h.ListCards)
 		admin.POST("/cards/generate", middleware.AuthAdmin(cfg.JWT.Secret), h.GenerateCards)
 		admin.DELETE("/cards/:id", middleware.AuthAdmin(cfg.JWT.Secret), h.DeleteCard)
+
+		// 代理池配置（所有项目公共，Redis 存储）
+		admin.GET("/proxy-config", middleware.AuthAdmin(cfg.JWT.Secret), h.GetProxyConfig)
+		admin.PUT("/proxy-config", middleware.AuthAdmin(cfg.JWT.Secret), h.SaveProxyConfig)
 	}
 
 	return r

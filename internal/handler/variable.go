@@ -24,7 +24,7 @@ type VariableRequest struct {
 // VariableResponse 项目变量列表项
 type VariableResponse struct {
 	ID        uint64 `json:"id"`
-	ProjectID uint64 `json:"project_id"`
+	ProjectID string `json:"project_id"`
 	Key       string `json:"key"`
 	Type      string `json:"type"`
 	Value     string `json:"value"`
@@ -59,9 +59,9 @@ func validateVariable(vtype, value string) (bool, string) {
 
 // ListVariables 项目变量（按项目）：查询列表
 func (h *Handler) ListVariables(c *gin.Context) {
-	projectID, ok := parseID(c, "id")
+	projectID, ok := parseProjectID(c, "id")
 	if !ok {
-		util.Fail(c, util.CodeParamError, "参数错误：id 不合法")
+		util.Fail(c, util.CodeParamError, "参数错误：项目 id 不合法")
 		return
 	}
 	var vars []model.ProjectVariable
@@ -86,9 +86,9 @@ func (h *Handler) ListVariables(c *gin.Context) {
 
 // CreateVariable 项目变量（按项目）：新增
 func (h *Handler) CreateVariable(c *gin.Context) {
-	projectID, ok := parseID(c, "id")
+	projectID, ok := parseProjectID(c, "id")
 	if !ok {
-		util.Fail(c, util.CodeParamError, "参数错误：id 不合法")
+		util.Fail(c, util.CodeParamError, "参数错误：项目 id 不合法")
 		return
 	}
 	var req VariableRequest

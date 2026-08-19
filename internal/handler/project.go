@@ -14,6 +14,7 @@ import (
 
 // CreateProjectRequest 添加项目请求
 type CreateProjectRequest struct {
+	ID          string `json:"id" binding:"required"` // 6 位数字，用户自定义
 	Name        string `json:"name" binding:"required"`
 	Remark      string `json:"remark"`
 	LoginLimit  int    `json:"login_limit"`  // 0 不限制；N 该用户今日只能登录 N 次
@@ -30,7 +31,7 @@ type UpdateProjectRequest struct {
 
 // ProjectResponse 项目列表项
 type ProjectResponse struct {
-	ID          uint64 `json:"id"`
+	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Remark      string `json:"remark"`
 	LoginLimit  int    `json:"login_limit"`
@@ -76,14 +77,19 @@ func (h *Handler) ListProjects(c *gin.Context) {
 	util.OK(c, util.NewPage(list, total, page, pageSize))
 }
 
-// CreateProject 添加项目【参数】项目名 备注 限制登录次数
+// CreateProject 添加项目【参数】id(6位数字) 项目名 备注 限制登录次数
 func (h *Handler) CreateProject(c *gin.Context) {
 	var req CreateProjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.Fail(c, util.CodeParamError, "参数错误：name 不能为空")
+		util.Fail(c, util.CodeParamError, "参数错误：id、name 不能为空")
 		return
 	}
+	req.ID = strings.TrimSpace(req.ID)
 	req.Name = strings.TrimSpace(req.Name)
+	if !isProjectID(req.ID) {
+		util.Fail(c, util.CodeParamError, "参数错误：项目 id 必须为 6 位数字")
+		return
+	}
 	if req.Name == "" {
 		util.Fail(c, util.CodeParamError, "参数错误：项目名不能为空")
 		return
@@ -94,13 +100,13 @@ func (h *Handler) CreateProject(c *gin.Context) {
 	}
 
 	var count int64
-	database.DB.Model(&model.Project{}).Where("name = ? AND deleted_at IS NULL", req.Name).Count(&count)
+	database.DB.Model(&model.Project{}).Where("(name = ? OR id = ?) AND deleted_at IS NULL", req.Name, req.ID).Count(&count)
 	if count > 0 {
-		util.Fail(c, util.CodeConflict, "项目名已存在")
+		util.Fail(c, util.CodeConflict, "项目名或项目 id 已存在")
 		return
 	}
 
-	p := model.Project{Name: req.Name, Remark: req.Remark, LoginLimit: req.LoginLimit, UnbindLimit: req.UnbindLimit}
+	p := model.Project{ID: req.ID, Name: req.Name, Remark: req.Remark, LoginLimit: req.LoginLimit, UnbindLimit: req.UnbindLimit}
 	if err := database.DB.Create(&p).Error; err != nil {
 		util.Fail(c, util.CodeDBError, "创建失败")
 		return
@@ -110,9 +116,9 @@ func (h *Handler) CreateProject(c *gin.Context) {
 
 // UpdateProject 编辑项目【参数】项目名 备注 限制登录次数
 func (h *Handler) UpdateProject(c *gin.Context) {
-	id, ok := parseID(c, "id")
+	id, ok := parseProjectID(c, "id")
 	if !ok {
-		util.Fail(c, util.CodeParamError, "参数错误：id 不合法")
+		util.Fail(c, util.CodeParamError, "参数错误：项目 id 不合法")
 		return
 	}
 	var req UpdateProjectRequest
@@ -162,9 +168,9 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 
 // DeleteProject 删除项目（伪删除，前端不显示即可）
 func (h *Handler) DeleteProject(c *gin.Context) {
-	id, ok := parseID(c, "id")
+	id, ok := parseProjectID(c, "id")
 	if !ok {
-		util.Fail(c, util.CodeParamError, "参数错误：id 不合法")
+		util.Fail(c, util.CodeParamError, "参数错误：项目 id 不合法")
 		return
 	}
 	var project model.Project

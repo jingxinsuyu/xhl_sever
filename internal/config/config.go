@@ -55,6 +55,7 @@ type Security struct {
 	CaptchaExpireSeconds int    `yaml:"captcha_expire_seconds"`   // 图形验证码有效期（秒）
 	ClientSignSalt       string `yaml:"client_sign_salt"`         // 客户端登录参数签名盐
 	ClientAESKey         string `yaml:"client_aes_key"`           // 客户端登录密码 AES 密钥（16 字节）
+	QrLoginAESKey        string `yaml:"qrlogin_aes_key"`          // qrlogin data 加密 AES 密钥（16 字节）
 }
 
 // Upload 文件上传配置

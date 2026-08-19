@@ -77,10 +77,10 @@ func (h *Handler) loginLimited(username string) bool {
 
 // recordDailyLogin 记录今日登录次数（每次成功校验后调用），返回当前计数。
 // Redis INCR，TTL 至当日结束；redis 出错时返回 0（不阻断登录）。
-func (h *Handler) recordDailyLogin(projectID, userID uint64) int64 {
+func (h *Handler) recordDailyLogin(projectID string, userID uint64) int64 {
 	date := timeNow().Format("20060102")
 	ctx := context.Background()
-	key := "login:daily:" + strconv.FormatUint(projectID, 10) + ":" + strconv.FormatUint(userID, 10) + ":" + date
+	key := "login:daily:" + projectID + ":" + strconv.FormatUint(userID, 10) + ":" + date
 	count, err := h.Redis.Incr(ctx, key).Result()
 	if err != nil {
 		return 0
@@ -93,9 +93,9 @@ func (h *Handler) recordDailyLogin(projectID, userID uint64) int64 {
 }
 
 // todayLoginCount 查询该用户今日在该项目的登录次数（无记录返回 0）。
-func (h *Handler) todayLoginCount(projectID, userID uint64) int64 {
+func (h *Handler) todayLoginCount(projectID string, userID uint64) int64 {
 	date := timeNow().Format("20060102")
-	key := "login:daily:" + strconv.FormatUint(projectID, 10) + ":" + strconv.FormatUint(userID, 10) + ":" + date
+	key := "login:daily:" + projectID + ":" + strconv.FormatUint(userID, 10) + ":" + date
 	n, err := h.Redis.Get(context.Background(), key).Int64()
 	if err != nil {
 		return 0
@@ -103,12 +103,12 @@ func (h *Handler) todayLoginCount(projectID, userID uint64) int64 {
 	return n
 }
 
-// clearDailyLogin 清除该用户今日登录计数。projectID=0 清除该用户全部项目。
-func (h *Handler) clearDailyLogin(projectID, userID uint64) error {
+// clearDailyLogin 清除该用户今日登录计数。projectID 为空清除该用户全部项目。
+func (h *Handler) clearDailyLogin(projectID string, userID uint64) error {
 	ctx := context.Background()
 	pattern := "login:daily:*:" + strconv.FormatUint(userID, 10) + ":*"
-	if projectID > 0 {
-		pattern = "login:daily:" + strconv.FormatUint(projectID, 10) + ":" + strconv.FormatUint(userID, 10) + ":*"
+	if projectID != "" {
+		pattern = "login:daily:" + projectID + ":" + strconv.FormatUint(userID, 10) + ":*"
 	}
 	iter := h.Redis.Scan(ctx, 0, pattern, 100).Iterator()
 	var keys []string
@@ -126,10 +126,10 @@ func (h *Handler) clearDailyLogin(projectID, userID uint64) error {
 
 // exceedDailyUnbindLimit 该用户今日在该项目的自助解绑次数是否已达上限（limit>0 时才调用）。
 // 用 redis INCR 计数，TTL 至当日结束；redis 出错时放行。
-func (h *Handler) exceedDailyUnbindLimit(limit int, projectID, userID uint64) bool {
+func (h *Handler) exceedDailyUnbindLimit(limit int, projectID string, userID uint64) bool {
 	date := timeNow().Format("20060102")
 	ctx := context.Background()
-	key := "unbind:daily:" + strconv.FormatUint(projectID, 10) + ":" + strconv.FormatUint(userID, 10) + ":" + date
+	key := "unbind:daily:" + projectID + ":" + strconv.FormatUint(userID, 10) + ":" + date
 	count, err := h.Redis.Incr(ctx, key).Result()
 	if err != nil {
 		return false

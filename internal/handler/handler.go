@@ -88,6 +88,28 @@ func parseID(c *gin.Context, name string) (uint64, bool) {
 	return id, true
 }
 
+// parseProjectID 解析路径中的项目 id（6 位数字字符串，弃用自增 id 后）。
+func parseProjectID(c *gin.Context, name string) (string, bool) {
+	id := strings.TrimSpace(c.Param(name))
+	if !isProjectID(id) {
+		return "", false
+	}
+	return id, true
+}
+
+// isProjectID 校验项目 id：6 位纯数字。
+func isProjectID(id string) bool {
+	if len(id) != 6 {
+		return false
+	}
+	for _, r := range id {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // uploadRoot 上传根目录（绝对路径，锚定软件根目录，不受启动目录影响）
 func (h *Handler) uploadRoot() string {
 	return h.Config.UploadDir()

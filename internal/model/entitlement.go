@@ -6,7 +6,7 @@ import "time"
 type UserEntitlement struct {
 	ID        uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
 	UserID    uint64    `gorm:"not null;index:idx_user_project,unique" json:"user_id"`
-	ProjectID uint64    `gorm:"not null;index:idx_user_project,unique" json:"project_id"`
+	ProjectID string    `gorm:"not null;size:6;index:idx_user_project,unique" json:"project_id"`
 	ExpiresAt time.Time `json:"expires_at"` // 到期时间
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

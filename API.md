@@ -182,7 +182,7 @@ Content-Type: application/json
   "username": "testuser",
   "role": "user",
   "token": "eyJ...",
-  "project_id": 1,
+  "project_id": "100001",
   "type_name": "月卡",
   "days": 30,
   "expires_at": "2026-09-11 10:00:00"
@@ -202,7 +202,7 @@ Content-Type: application/json
 
 ```json
 {
-  "project_id": 1,
+  "project_id": "100001",
   "machine_code": "a1b2c3d4",
   "username": "testuser",
   "password_enc": "双重base64后的密文",
@@ -220,7 +220,7 @@ Content-Type: application/json
   "token": "eyJ...",
   "role": "user",
   "username": "testuser",
-  "project_id": 1,
+  "project_id": "100001",
   "has_time": true,
   "expires_at": "2026-09-11 10:00:00",
   "today_login_count": 1,
@@ -252,7 +252,7 @@ Content-Type: application/json
 
 ```json
 {
-  "project_id": 1,
+  "project_id": "100001",
   "cdkey": "XXXXXXXXXXXXXXXX",
   "username": "testuser"
 }
@@ -265,7 +265,7 @@ Content-Type: application/json
   "type_id": 1,
   "type_name": "月卡",
   "days": 30,
-  "project_id": 1,
+  "project_id": "100001",
   "expires_at": "2026-09-11 10:00:00"
 }
 ```
@@ -281,7 +281,7 @@ Content-Type: application/json
 
 ```json
 {
-  "project_id": 1,
+  "project_id": "100001",
   "username": "testuser",
   "super_password": "654321"
 }
@@ -294,7 +294,7 @@ Content-Type: application/json
 ### 3.7 获取项目轮播图
 
 ```
-GET /api/user/carousels?project_id=1
+GET /api/user/carousels?project_id=100001
 ```
 
 响应 `data`（数组）：
@@ -310,14 +310,14 @@ GET /api/user/carousels?project_id=1
 ### 3.8 获取项目广告（富文本）
 
 ```
-GET /api/user/ad?project_id=1
+GET /api/user/ad?project_id=100001
 ```
 
 响应 `data`：
 
 ```json
 {
-  "project_id": 1,
+  "project_id": "100001",
   "content": "<p>广告内容</p>",
   "updated_at": "2026-08-12 10:00:00"
 }
@@ -328,7 +328,7 @@ GET /api/user/ad?project_id=1
 ### 3.9 检测更新（用户端）
 
 ```
-GET /api/user/update?project_id=1&platform=android
+GET /api/user/update?project_id=100001&platform=android
 ```
 
 `platform` 取值：`android` / `pc` / `ios`。
@@ -340,7 +340,7 @@ GET /api/user/update?project_id=1&platform=android
   "platform": "android",
   "version": "1.2.0",
   "file_name": "app-1.2.0.apk",
-  "file_url": "/uploads/app/1/1723440000123_app-1.2.0.apk",
+  "file_url": "/uploads/app/100001/1723440000123_app-1.2.0.apk",
   "file_size": 12345678,
   "created_at": "2026-08-12 10:00:00"
 }
@@ -348,36 +348,68 @@ GET /api/user/update?project_id=1&platform=android
 
 ---
 
-## 4. moonshad 加密接口（需用户登录）
+## 4. 百度扫码确认（需用户登录 + 100001 会员）
+
+### 4.1 加密说明（data 字段）
+
+前端把账号凭证按 `用户名----密码----cookie` 拼接后加密：
 
 ```
-POST /api/moonshad
+明文 = 用户名----密码----cookie
+密文 = AES-ECB PKCS7 加密（密钥 = security.qrlogin_aes_key，16 字节）
+data = 密文 Base64 编码（单层）
+```
+
+> 服务端优先按单层 base64 解密；失败自动回退「双重 base64」兼容旧约定。
+
+### 4.2 接口（SSE 流式）
+
+```
+POST /api/xhl/qrlogin
 Authorization: Bearer <用户token>
 Content-Type: application/json
 ```
 
 ```json
 {
-  "project_id": 1,
-  "data": { "key": "value" },
-  "width": 750,
-  "height": 1334,
-  "alg": "v3",
-  "ua": "Mozilla/5.0 ..."
+  "loginUrl": "https://wappass.baidu.com/wp/?qrlogin&sign=xxxx&lp=pc",
+  "data": "单层base64密文"
 }
 ```
 
 | 参数 | 说明 |
 |---|---|
-| `project_id` | 项目 id，检测用户权限 |
-| `data` | 待加密的 json 对象 |
-| `width` / `height` | 视口尺寸，可选，默认 750 × 1334 |
-| `alg` | 加密算法，`v3`（默认）/ `v4` |
-| `ua` | v4 需要 User-Agent |
+| `loginUrl` | 前端识别二维码中的链接（含 `sign`、可选 `lp`） |
+| `data` | 加密后的 `用户名----密码----cookie` |
 
-响应 `data` 为 moonshad 签名结果（对象）。用户对该项目无未过期权限返回 **1016**。
+**鉴权/校验（不满足则返回普通 JSON 错误，不进入流）：**
+- 需用户登录（未登录返回 **1002**）。
+- 需是项目 `100001`（小火龙扫码登录器）会员且未过期（否则返回 **1004** / **1016**）。
+
+**通过后返回 `text/event-stream`，逐步推送进度：**
+
+```
+data: {"type":"log","message":"正在解密账号信息"}
+data: {"type":"log","message":"正在生成环境信息"}
+data: {"type":"log","message":"正在获取代理"}        ← 仅配置了代理池时
+data: {"type":"log","message":"正在请求百度确认"}
+data: {"type":"result","ok":true,"errno":"0","message":"确认成功"}
+```
+
+| 事件字段 | 说明 |
+|---|---|
+| `type=log` | 进度日志，客户端逐条追加到日志框 |
+| `type=result` | 最终结果（最后一个事件，随后流结束） |
+| `ok` | 是否确认成功 |
+| `errno` | 百度返回的 errno（字符串） |
+| `message` | 结果/错误信息 |
+
+解密后的账号凭证（用户名/密码/cookie）会写入 `ckdata` 表（每个用户一条，覆盖更新）。
+扫码请求使用代理池：配置了 `proxy_url` 时从该地址拉取一个代理；未配置则不走代理。
 
 ---
+
+
 
 ## 5. 管理后台接口
 
@@ -506,7 +538,7 @@ GET /api/admin/users/:id/membership
   "username": "testuser",
   "projects": [
     {
-      "project_id": 1,
+      "project_id": "100001",
       "project_name": "项目A",
       "expires_at": "2026-09-11 10:00:00",
       "has_time": true,
@@ -526,7 +558,7 @@ POST /api/admin/users/:id/clear-login
 ```
 
 ```json
-{ "project_id": 1 }
+{ "project_id": "100001" }
 ```
 
 `project_id` 为 0 时清零该用户全部项目。响应 `data` 不返回。
@@ -562,7 +594,7 @@ POST /api/admin/users/:id/unbind
 ```
 
 ```json
-{ "project_id": 1 }
+{ "project_id": "100001" }
 ```
 
 `project_id` 为空则解绑全部项目。响应 `data`：`{"unbound": true}`。管理员解绑不受每日次数限制。
@@ -596,10 +628,10 @@ POST /api/admin/projects
 ```
 
 ```json
-{ "name": "项目A", "remark": "备注", "login_limit": 0, "unbind_limit": 0 }
+{ "id": "100001", "name": "项目A", "remark": "备注", "login_limit": 0, "unbind_limit": 0 }
 ```
 
-响应 `data`：`{"id": 1}`。
+`id` 必填，6 位数字（用户自定义，创建后不可修改）。响应 `data`：`{"id": "100001"}`。
 
 #### 修改项目
 
@@ -633,9 +665,9 @@ GET /api/admin/projects/:id/versions?platform=android
 
 ```json
 {
-  "id": 1, "project_id": 1, "platform": "android", "version": "1.2.0",
+  "id": 1, "project_id": "100001", "platform": "android", "version": "1.2.0",
   "file_name": "app-1.2.0.apk",
-  "file_url": "/uploads/app/1/1723440000123_app-1.2.0.apk",
+  "file_url": "/uploads/app/100001/1723440000123_app-1.2.0.apk",
   "file_size": 12345678,
   "created_at": "2026-08-12 10:00:00"
 }
@@ -676,7 +708,7 @@ GET /api/admin/projects/:id/variables
 
 ```json
 {
-  "id": 1, "project_id": 1, "key": "max_version", "type": "string",
+  "id": 1, "project_id": "100001", "key": "max_version", "type": "string",
   "value": "1.2.0", "created_at": "...", "updated_at": "..."
 }
 ```
@@ -721,7 +753,7 @@ GET /api/admin/projects/:id/carousels
 
 ```json
 {
-  "id": 1, "project_id": 1, "image_url": "/uploads/image/1723440000123.jpg",
+  "id": 1, "project_id": "100001", "image_url": "/uploads/image/1723440000123.jpg",
   "link": "https://...", "created_at": "..."
 }
 ```
@@ -762,7 +794,7 @@ GET /api/admin/projects/:id/rich-text
 ```
 
 ```json
-{ "project_id": 1, "content": "<p>广告</p>", "updated_at": "..." }
+{ "project_id": "100001", "content": "<p>广告</p>", "updated_at": "..." }
 ```
 
 #### 保存广告内容（upsert）
@@ -784,12 +816,12 @@ PUT /api/admin/projects/:id/rich-text
 #### 查询卡密类型
 
 ```
-GET /api/admin/card-types?project_id=1&keyword=
+GET /api/admin/card-types?project_id=100001&keyword=
 ```
 
 ```json
 {
-  "id": 1, "project_id": 1, "name": "月卡", "days": 30,
+  "id": 1, "project_id": "100001", "name": "月卡", "days": 30,
   "created_at": "...", "updated_at": "..."
 }
 ```
@@ -801,7 +833,7 @@ POST /api/admin/card-types
 ```
 
 ```json
-{ "project_id": 1, "name": "月卡", "days": 30 }
+{ "project_id": "100001", "name": "月卡", "days": 30 }
 ```
 
 `days` 必须 > 0，类型名同项目下唯一。响应 `data`：`{"id": 1}`。
@@ -821,7 +853,7 @@ DELETE /api/admin/card-types/:id
 #### 查询卡密
 
 ```
-GET /api/admin/cards?project_id=1&type_id=&keyword=&status=&start_time=&end_time=&page=1&page_size=10
+GET /api/admin/cards?project_id=100001&type_id=&keyword=&status=&start_time=&end_time=&page=1&page_size=10
 ```
 
 | 参数 | 说明 |
@@ -860,7 +892,7 @@ POST /api/admin/cards/generate
 ```json
 {
   "count": 100,
-  "project_id": 1,
+  "project_id": "100001",
   "type_id": 1,
   "cdkeys": ["XXXXXXXXXXXXXXXX", "..."]
 }
@@ -876,7 +908,40 @@ DELETE /api/admin/cards/:id
 
 ---
 
+### 5.11 代理池配置（所有项目公共）
+
+> 存储在 Redis（key `xhl:proxy_url`），供扫码确认（/api/xhl/qrlogin）拉取代理。未配置则不使用代理。
+
+#### 查询代理池配置
+
+```
+GET /api/admin/proxy-config
+```
+
+响应 `data`：
+
+```json
+{ "proxy_url": "http://api.example.com/getproxies" }
+```
+
+未配置时 `proxy_url` 为空字符串。
+
+#### 保存代理池配置
+
+```
+PUT /api/admin/proxy-config
+```
+
+```json
+{ "proxy_url": "http://api.example.com/getproxies" }
+```
+
+`proxy_url` 为空表示不使用代理。代理提取地址返回首行作为代理，支持
+`host:port`、`http://host:port`、`host:port:user:pass` 三种格式。
+
+---
+
 ## 6. 静态资源
 
-- 上传文件访问：`/uploads/...`（如 `/uploads/image/xxx.jpg`、`/uploads/app/1/xxx.apk`）。
+- 上传文件访问：`/uploads/...`（如 `/uploads/image/xxx.jpg`、`/uploads/app/100001/xxx.apk`）。
 - `upload.base_url` 非空时，`image_url` / `file_url` 返回完整地址（`base_url + /uploads/...`）；为空时返回相对路径。

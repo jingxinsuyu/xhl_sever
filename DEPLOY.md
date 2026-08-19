@@ -20,9 +20,12 @@ xhl_sever/
 │   ├── middleware/              # 鉴权中间件（admin / super / user）
 │   ├── handler/                 # 接口处理器
 │   ├── model/                   # 数据模型
-│   ├── crypto/                  # AES 加解密 / moonshad 加密
+│   ├── crypto/                  # 服务自身加解密（登录密码 / qrlogin data / AES 原语）
+│   ├── baidu/                   # 百度相关（device 设备指纹 / qrlogin 扫码确认）
+│   ├── migration/               # 一次性数据迁移（project id 字符串化）
 │   └── util/                    # JWT / 密码哈希 / 签名 / 卡密生成 / 响应封装
-├── deploy_bundle/               # Docker 部署参考（Dockerfile、docker-compose.yml、前端 dist）
+├── Dockerfile                   # Docker 部署参考镜像（根目录）
+├── docker-compose.yml           # Docker 部署参考编排（根目录）
 ├── deploy.py                    # 一键部署脚本（内含服务器连接信息，不入库）
 └── uploads/                     # 上传目录（轮播图 / 更新文件，不入库）
 ```
@@ -45,6 +48,7 @@ xhl_sever/
 | `security` | `captcha_expire_seconds` | 图形验证码有效期（秒） |
 | `security` | `client_sign_salt` | 客户端登录参数签名盐，**与客户端一致，务必修改** |
 | `security` | `client_aes_key` | 客户端登录密码 AES 密钥（16 字节），**与客户端一致，务必修改** |
+| `security` | `qrlogin_aes_key` | 扫码确认 data 加密 AES 密钥（16 字节），**与前端一致，务必修改** |
 | `upload` | `dir` | 上传根目录（默认 `uploads`） |
 | `upload` | `base_url` | 静态资源对外访问地址；**容器部署留空** → 返回 `/uploads` 相对路径 |
 | `super_admin` | `username/password/nickname` | 超级管理员（yaml 配置，不落库），**生产务必修改默认密码** |
@@ -73,9 +77,30 @@ go run .
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o xhl_sever-linux .
 ```
 
+## 3.1 项目 id 字符串化迁移（一次性，本地 + 服务器）
+
+> 新版本 project 弃用自增 id，改为 **6 位数字字符串**（用户自定义）。
+> 已有数据库需迁移：目标项目（名含「小火龙」，回退 id=1）→ `100001`，其余项目 → `LPAD(旧id,6,'0')`。
+
+```bash
+# 备份 + 迁移（先导出 JSON 快照，再改列类型 + 迁移数据，最后校验）
+./xhl_sever -migrate-project-id
+# 可选：目标项目识别关键字 / 新 id
+./xhl_sever -migrate-project-id -project-name 小火龙 -target-id 100001
+```
+
+- 迁移工具读 `config.yaml` 的数据库配置，**本地/服务器同一二进制**都能跑。
+- 自动快照存到 `软件根目录/project_id_migration_backup_<时间戳>.json`，供回滚。
+- 已迁移过会自动检测并跳过；历史硬删项目遗留的孤儿引用仅警告，不阻断。
+- **服务器执行**：上传新 `xhl_sever-linux` → `chmod +x` → 在 `/worker/xhl_sever` 下执行。容器内 config 的 host 是服务名 `mysql`（仅容器内可解析），宿主机直连需覆盖 host：
+  ```bash
+  ./xhl_sever -migrate-project-id -db-host 127.0.0.1
+  ```
+- ⚠ 迁移后旧客户端（写死 project_id=1）登录会失败，需随客户端升级改用 `100001`。
+
 ## 4. 生产 Docker 部署
 
-全容器化：一个 `docker-compose.yml` 管理 **MySQL + Redis + Go 后端** 三个服务，参考文件见 `deploy_bundle/`（`Dockerfile`、`docker-compose.yml`）。
+全容器化：一个 `docker-compose.yml` 管理 **MySQL + Redis + Go 后端** 三个服务，参考文件为仓库根目录的 `Dockerfile` 与 `docker-compose.yml`。
 
 ### 4.1 服务器目录结构（/worker）
 
@@ -95,7 +120,7 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o xhl_sever-linux .
     └── uploads/
 ```
 
-### 4.2 后端镜像（deploy_bundle/Dockerfile）
+### 4.2 后端镜像（根目录 Dockerfile）
 
 ```dockerfile
 FROM alpine:3.20
@@ -108,7 +133,7 @@ EXPOSE 8888
 ENTRYPOINT ["/app/xhl_sever"]
 ```
 
-- 基于 **alpine + 静态二进制**；时区设为上海；`ca-certificates` 供 moonshad 等外部 HTTPS 调用。
+- 基于 **alpine + 静态二进制**；时区设为上海；`ca-certificates` 供百度扫码确认（passport.baidu.com）等外部 HTTPS 调用。
 - `config.yaml / web / uploads` 由 compose 以卷挂载，**不用打进镜像**。
 
 ### 4.3 容器内 config.yaml 要点
@@ -128,12 +153,12 @@ upload:
   base_url: ""        # 留空 → 返回 /uploads 相对路径
 ```
 
-### 4.4 docker-compose.yml 要点（见 deploy_bundle/）
+### 4.4 docker-compose.yml 要点（根目录 docker-compose.yml）
 
 - `xhl-mysql`：mysql:8.0，仅绑定 `127.0.0.1:3306`，带 healthcheck；
 - `xhl-redis`：redis:7-alpine，加载 redis.conf（requirepass + AOF 持久化），仅绑定 `127.0.0.1:6379`；
-- `xhl-sever`：构建自 `./xhl_sever`，`depends_on` 等 mysql/redis healthcheck 通过；对外端口 **8888**；
-- 卷挂载：`config.yaml`、`web/`、`uploads/` 均在宿主机 `./xhl_sever/` 下，**改配置/换前端免重建镜像**。
+- `xhl-sever`：构建自 `.`（根目录，含 Dockerfile），`depends_on` 等 mysql/redis healthcheck 通过；对外端口 **8888**；
+- 卷挂载：`config.yaml`、`web/`、`uploads/` 均在宿主机仓库根目录下，**改配置/换前端免重建镜像**。
 
 ```bash
 cd /worker && docker compose up -d --build     # 首次/更新后端后执行
@@ -169,5 +194,6 @@ python deploy.py frontend    # 上传 ../xhl-admin/web → 静态卷挂载，无
 | 启动报 `初始化 Redis 失败` | 确认 Redis 密码（`requirepass`）与 config 一致 |
 | 前端刷新 404 | 确认 `static_dir` 指向 web 目录，后端已做 SPA 回退 |
 | 图片/文件访问 404 | 确认 `upload.base_url` 配置；容器部署留空用相对路径 |
-| moonshad 接口报外部 HTTPS 错误 | 确认镜像装了 `ca-certificates`（Dockerfile 已含） |
+| 扫码确认接口报外部 HTTPS 错误 | 确认镜像装了 `ca-certificates`（Dockerfile 已含） |
+| 旧客户端登录报「项目不存在」 | 项目 id 已改为字符串，需升级客户端改用新 project_id |
 | SFTP 上传后二进制无执行权限 | 执行 `chmod +x xhl_sever-linux`（SFTP 会丢可执行位） |

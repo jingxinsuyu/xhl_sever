@@ -172,7 +172,7 @@ func (h *Handler) Register(c *gin.Context) {
 		if err := tx.Create(&user).Error; err != nil {
 			return err
 		}
-		ct, err = redeemCard(tx, &user, req.CDKey, 0, timeNow())
+		ct, err = redeemCard(tx, &user, req.CDKey, "", timeNow())
 		return err
 	})
 	if err != nil {
@@ -204,7 +204,7 @@ func (h *Handler) Register(c *gin.Context) {
 // UserLoginRequest 用户登录请求
 // 密码以 password_enc（AES 加密）传输，请求带 ts（时间戳）与 sign（参数签名），防抓包/防篡改/防重放。
 type UserLoginRequest struct {
-	ProjectID   uint64 `json:"project_id" binding:"required"`   // 项目 id（按项目绑定）
+	ProjectID   string `json:"project_id" binding:"required"`   // 项目 id（6 位数字，按项目绑定）
 	MachineCode string `json:"machine_code" binding:"required"` // 机器码 / 安卓 id
 	Username    string `json:"username" binding:"required"`
 	PasswordEnc string `json:"password_enc" binding:"required"` // AES 加密后的登录密码
@@ -242,7 +242,7 @@ func (h *Handler) UserLogin(c *gin.Context) {
 		"captcha_id":   req.CaptchaID,
 		"machine_code": req.MachineCode,
 		"password_enc": req.PasswordEnc,
-		"project_id":   strconv.FormatUint(req.ProjectID, 10),
+		"project_id":   req.ProjectID,
 		"ts":           strconv.FormatInt(req.Ts, 10),
 		"username":     req.Username,
 	}
@@ -345,7 +345,7 @@ func (h *Handler) UserLogin(c *gin.Context) {
 
 // checkOrBindMachine 校验并绑定机器码。
 // 返回 bound=false 表示该用户在此项目已绑定其他设备，需先解绑。
-func (h *Handler) checkOrBindMachine(user *model.User, projectID uint64, machineCode string) (bool, error) {
+func (h *Handler) checkOrBindMachine(user *model.User, projectID string, machineCode string) (bool, error) {
 	var b model.UserBinding
 	err := database.DB.Where("user_id = ? AND project_id = ? AND machine_code = ?", user.ID, projectID, machineCode).First(&b).Error
 	if err == nil {

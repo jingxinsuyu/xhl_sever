@@ -27,7 +27,7 @@ const (
 // CarouselResponse 轮播图列表项
 type CarouselResponse struct {
 	ID        uint64 `json:"id"`
-	ProjectID uint64 `json:"project_id"`
+	ProjectID string `json:"project_id"`
 	ImageURL  string `json:"image_url"`
 	Link      string `json:"link"`
 	CreatedAt string `json:"created_at"`
@@ -35,9 +35,9 @@ type CarouselResponse struct {
 
 // ListCarousels 轮播图（按项目）：查询列表
 func (h *Handler) ListCarousels(c *gin.Context) {
-	projectID, ok := parseID(c, "id")
+	projectID, ok := parseProjectID(c, "id")
 	if !ok {
-		util.Fail(c, util.CodeParamError, "参数错误：id 不合法")
+		util.Fail(c, util.CodeParamError, "参数错误：项目 id 不合法")
 		return
 	}
 	var carousels []model.Carousel
@@ -60,9 +60,9 @@ func (h *Handler) ListCarousels(c *gin.Context) {
 
 // CreateCarousel 添加轮播图【multipart】：image=图片 + link=跳转连接 + apply_all=1 则同时为所有项目添加
 func (h *Handler) CreateCarousel(c *gin.Context) {
-	projectID, ok := parseID(c, "id")
+	projectID, ok := parseProjectID(c, "id")
 	if !ok {
-		util.Fail(c, util.CodeParamError, "参数错误：id 不合法")
+		util.Fail(c, util.CodeParamError, "参数错误：项目 id 不合法")
 		return
 	}
 	applyAll := c.PostForm("apply_all") == "1" || c.PostForm("apply_all") == "true"
@@ -88,7 +88,7 @@ func (h *Handler) CreateCarousel(c *gin.Context) {
 	}
 
 	// 目标项目列表
-	projectIDs := []uint64{projectID}
+	projectIDs := []string{projectID}
 	if applyAll {
 		var projects []model.Project
 		if err := database.DB.Where("deleted_at IS NULL").Select("id").Find(&projects).Error; err != nil {

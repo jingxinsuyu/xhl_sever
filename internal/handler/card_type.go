@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 
 	"xhl-server/internal/database"
@@ -15,7 +14,7 @@ import (
 
 // CreateCardTypeRequest 创建卡密类型请求
 type CreateCardTypeRequest struct {
-	ProjectID uint64 `json:"project_id" binding:"required"`
+	ProjectID string `json:"project_id" binding:"required"`
 	Name      string `json:"name" binding:"required"`
 	Days      int    `json:"days" binding:"required"` // 充值天数
 }
@@ -23,7 +22,7 @@ type CreateCardTypeRequest struct {
 // CardTypeResponse 卡密类型响应
 type CardTypeResponse struct {
 	ID        uint64 `json:"id"`
-	ProjectID uint64 `json:"project_id"`
+	ProjectID string `json:"project_id"`
 	Name      string `json:"name"`
 	Days      int    `json:"days"`
 	CreatedAt string `json:"created_at"`
@@ -32,8 +31,8 @@ type CardTypeResponse struct {
 
 // ListCardTypes 查询卡密类型【参数】project_id(必填) keyword 模糊搜索（仅未删除）
 func (h *Handler) ListCardTypes(c *gin.Context) {
-	projectID, _ := strconv.ParseUint(c.Query("project_id"), 10, 64)
-	if projectID == 0 {
+	projectID := strings.TrimSpace(c.Query("project_id"))
+	if projectID == "" {
 		util.Fail(c, util.CodeParamError, "参数错误：project_id 不能为空")
 		return
 	}

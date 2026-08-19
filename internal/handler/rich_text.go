@@ -13,16 +13,16 @@ import (
 
 // RichTextResponse 富文本广告内容
 type RichTextResponse struct {
-	ProjectID uint64 `json:"project_id"`
+	ProjectID string `json:"project_id"`
 	Content   string `json:"content"`
 	UpdatedAt string `json:"updated_at"`
 }
 
 // GetRichText 富文本广告（按项目）：查询，每个项目初始为空
 func (h *Handler) GetRichText(c *gin.Context) {
-	projectID, ok := parseID(c, "id")
+	projectID, ok := parseProjectID(c, "id")
 	if !ok {
-		util.Fail(c, util.CodeParamError, "参数错误：id 不合法")
+		util.Fail(c, util.CodeParamError, "参数错误：项目 id 不合法")
 		return
 	}
 	var ad model.RichTextAd
@@ -49,9 +49,9 @@ type SaveRichTextRequest struct {
 
 // SaveRichText 富文本广告（按项目）：编辑保存（upsert）
 func (h *Handler) SaveRichText(c *gin.Context) {
-	projectID, ok := parseID(c, "id")
+	projectID, ok := parseProjectID(c, "id")
 	if !ok {
-		util.Fail(c, util.CodeParamError, "参数错误：id 不合法")
+		util.Fail(c, util.CodeParamError, "参数错误：项目 id 不合法")
 		return
 	}
 	var req SaveRichTextRequest

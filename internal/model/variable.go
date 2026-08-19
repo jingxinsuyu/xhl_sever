@@ -13,7 +13,7 @@ const (
 // ProjectVariable 项目变量表（string/int/bool/json 简单变量）
 type ProjectVariable struct {
 	ID        uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	ProjectID uint64    `gorm:"not null;index" json:"project_id"`
+	ProjectID string    `gorm:"not null;size:6;index" json:"project_id"`
 	Key       string    `gorm:"size:64;not null" json:"key"`
 	Type      string    `gorm:"size:16;not null;default:string" json:"type"` // string / int / bool / json
 	Value     string    `gorm:"size:1024;not null;default:''" json:"value"`

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"xhl-server/internal/database"
@@ -27,7 +26,7 @@ func validPlatform(p string) bool {
 // VersionResponse 版本列表项
 type VersionResponse struct {
 	ID        uint64 `json:"id"`
-	ProjectID uint64 `json:"project_id"`
+	ProjectID string `json:"project_id"`
 	Platform  string `json:"platform"` // android / pc / ios
 	Version   string `json:"version"`
 	FileName  string `json:"file_name"`
@@ -38,9 +37,9 @@ type VersionResponse struct {
 
 // ListVersions 版本管理（按项目）：查询项目版本列表（可选按平台过滤）
 func (h *Handler) ListVersions(c *gin.Context) {
-	projectID, ok := parseID(c, "id")
+	projectID, ok := parseProjectID(c, "id")
 	if !ok {
-		util.Fail(c, util.CodeParamError, "参数错误：id 不合法")
+		util.Fail(c, util.CodeParamError, "参数错误：项目 id 不合法")
 		return
 	}
 	platform := strings.TrimSpace(c.Query("platform"))
@@ -74,9 +73,9 @@ func (h *Handler) ListVersions(c *gin.Context) {
 
 // UploadVersion 更新版本【multipart】：字段 platform=平台(android/pc/ios) + version=版本号 + 上传更新文件
 func (h *Handler) UploadVersion(c *gin.Context) {
-	projectID, ok := parseID(c, "id")
+	projectID, ok := parseProjectID(c, "id")
 	if !ok {
-		util.Fail(c, util.CodeParamError, "参数错误：id 不合法")
+		util.Fail(c, util.CodeParamError, "参数错误：项目 id 不合法")
 		return
 	}
 
@@ -108,16 +107,16 @@ func (h *Handler) UploadVersion(c *gin.Context) {
 		return
 	}
 
-	dir := filepath.Join(h.uploadRoot(), "app", fmt.Sprintf("%d", projectID))
+	dir := filepath.Join(h.uploadRoot(), "app", projectID)
 	if err := ensureDir(dir); err != nil {
 		util.Fail(c, util.CodeDBError, "创建上传目录失败")
 		return
 	}
 
 	filename := sanitizeFileName(fileHeader.Filename)
-	relPath := filepath.Join("uploads", "app", fmt.Sprintf("%d", projectID),
+	relPath := filepath.Join("uploads", "app", projectID,
 		fmt.Sprintf("%d_%s", timeNow().UnixMilli(), filename))
-	absPath := filepath.Join(h.uploadRoot(), "app", fmt.Sprintf("%d", projectID),
+	absPath := filepath.Join(h.uploadRoot(), "app", projectID,
 		fmt.Sprintf("%d_%s", timeNow().UnixMilli(), filename))
 
 	if err := c.SaveUploadedFile(fileHeader, absPath); err != nil {
@@ -150,8 +149,8 @@ func (h *Handler) UploadVersion(c *gin.Context) {
 // UserUpdate 用户端检测更新【无需登录】：按 项目+平台(android/pc/ios) 返回最新版本下载链接。
 // 参数 project_id、platform；该平台暂无版本时 data 为 null。
 func (h *Handler) UserUpdate(c *gin.Context) {
-	projectID, err := strconv.ParseUint(c.Query("project_id"), 10, 64)
-	if err != nil || projectID == 0 {
+	projectID := strings.TrimSpace(c.Query("project_id"))
+	if projectID == "" {
 		util.Fail(c, util.CodeParamError, "参数错误：project_id 不能为空")
 		return
 	}
@@ -172,7 +171,7 @@ func (h *Handler) UserUpdate(c *gin.Context) {
 	}
 
 	var v model.Version
-	err = database.DB.Where("project_id = ? AND platform = ?", projectID, platform).Order("id DESC").First(&v).Error
+	err := database.DB.Where("project_id = ? AND platform = ?", projectID, platform).Order("id DESC").First(&v).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			util.OK(c, nil) // 该平台暂无版本

@@ -40,6 +40,8 @@ security:
   client_sign_salt: "CHANGE_ME"
   # 客户端登录密码 AES 密钥（必须 16 字节，与客户端保持一致，务必修改）
   client_aes_key: "CHANGE_ME"
+  # qrlogin 账号 data 加密 AES 密钥（必须 16 字节，前端加密用，务必修改）
+  qrlogin_aes_key: "CHANGE_ME"
 
 upload:
   # 上传根目录（相对或绝对路径）

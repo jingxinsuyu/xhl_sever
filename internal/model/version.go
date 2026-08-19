@@ -12,7 +12,7 @@ const (
 // Version 项目版本表（按平台：android/pc/ios，版本号 + 更新文件）
 type Version struct {
 	ID        uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	ProjectID uint64    `gorm:"not null;index" json:"project_id"`
+	ProjectID string    `gorm:"not null;size:6;index" json:"project_id"`
 	Platform  string    `gorm:"size:16;not null;default:''" json:"platform"` // android / pc / ios
 	Version   string    `gorm:"size:64;not null" json:"version"`             // 版本号
 	FileName  string    `gorm:"size:255;not null;default:''" json:"file_name"`

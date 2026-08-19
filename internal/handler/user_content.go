@@ -2,7 +2,7 @@ package handler
 
 import (
 	"errors"
-	"strconv"
+	"strings"
 
 	"xhl-server/internal/database"
 	"xhl-server/internal/model"
@@ -22,8 +22,8 @@ type UserCarouselItem struct {
 // GetUserCarousels 获取项目轮播图数据（无需登录）。
 // 参数 project_id；返回该项目的轮播图列表 [{id, image_url, link}]，链接为空表示不跳转。
 func (h *Handler) GetUserCarousels(c *gin.Context) {
-	projectID, err := strconv.ParseUint(c.Query("project_id"), 10, 64)
-	if err != nil || projectID == 0 {
+	projectID := strings.TrimSpace(c.Query("project_id"))
+	if projectID == "" {
 		util.Fail(c, util.CodeParamError, "参数错误：project_id 不能为空")
 		return
 	}
@@ -56,8 +56,8 @@ func (h *Handler) GetUserCarousels(c *gin.Context) {
 // GetUserAd 获取项目广告内容（富文本，无需登录）。
 // 参数 project_id；返回 {project_id, content, updated_at}，无内容时 content 为空字符串。
 func (h *Handler) GetUserAd(c *gin.Context) {
-	projectID, err := strconv.ParseUint(c.Query("project_id"), 10, 64)
-	if err != nil || projectID == 0 {
+	projectID := strings.TrimSpace(c.Query("project_id"))
+	if projectID == "" {
 		util.Fail(c, util.CodeParamError, "参数错误：project_id 不能为空")
 		return
 	}
@@ -72,7 +72,7 @@ func (h *Handler) GetUserAd(c *gin.Context) {
 	}
 
 	var ad model.RichTextAd
-	err = database.DB.Where("project_id = ?", projectID).First(&ad).Error
+	err := database.DB.Where("project_id = ?", projectID).First(&ad).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			util.OK(c, gin.H{"project_id": projectID, "content": "", "updated_at": ""})

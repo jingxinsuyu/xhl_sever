@@ -25,7 +25,7 @@ var (
 
 // ExchangeRequest 兑换卡密请求
 type ExchangeRequest struct {
-	ProjectID uint64 `json:"project_id" binding:"required"` // 项目 id（卡密需属于该项目）
+	ProjectID string `json:"project_id" binding:"required"` // 项目 id（6 位数字，卡密需属于该项目）
 	CDKey     string `json:"cdkey" binding:"required"`
 	Username  string `json:"username" binding:"required"` // 兑换到哪个用户名（无需登录）
 }
@@ -83,8 +83,8 @@ func (h *Handler) Exchange(c *gin.Context) {
 
 // UserUnbindRequest 用户解绑请求
 type UserUnbindRequest struct {
-	ProjectID    uint64 `json:"project_id" binding:"required"` // 按项目解绑
-	Username     string `json:"username" binding:"required"`
+	ProjectID     string `json:"project_id" binding:"required"` // 按项目解绑
+	Username      string `json:"username" binding:"required"`
 	SuperPassword string `json:"super_password" binding:"required"`
 }
 
@@ -142,7 +142,7 @@ func (h *Handler) UserUnbind(c *gin.Context) {
 // 3. 若 expectProjectID > 0，校验卡密所属项目一致；
 // 4. 按类型 days 累加用户在该项目下的到期时间（已过期从当前起算）；
 // 5. 更新用户权限 + 标记卡密已使用。
-func redeemCard(tx *gorm.DB, user *model.User, cdkey string, expectProjectID uint64, now time.Time) (*model.CardType, error) {
+func redeemCard(tx *gorm.DB, user *model.User, cdkey string, expectProjectID string, now time.Time) (*model.CardType, error) {
 	var card model.Card
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("cdkey = ?", cdkey).First(&card).Error; err != nil {
@@ -162,7 +162,7 @@ func redeemCard(tx *gorm.DB, user *model.User, cdkey string, expectProjectID uin
 		}
 		return nil, err
 	}
-	if expectProjectID > 0 && ct.ProjectID != expectProjectID {
+	if expectProjectID != "" && ct.ProjectID != expectProjectID {
 		return nil, ErrCardProjectMism
 	}
 
@@ -191,7 +191,7 @@ func redeemCard(tx *gorm.DB, user *model.User, cdkey string, expectProjectID uin
 }
 
 // lockOrCreateEntitlement 行锁读取用户在某项目的权限记录，不存在则创建
-func lockOrCreateEntitlement(tx *gorm.DB, userID, projectID uint64) (*model.UserEntitlement, error) {
+func lockOrCreateEntitlement(tx *gorm.DB, userID uint64, projectID string) (*model.UserEntitlement, error) {
 	var ent model.UserEntitlement
 	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("user_id = ? AND project_id = ?", userID, projectID).First(&ent).Error
@@ -213,7 +213,7 @@ func lockOrCreateEntitlement(tx *gorm.DB, userID, projectID uint64) (*model.User
 }
 
 // getEntitlement 读取用户在某项目的权限记录（不存在返回 nil）
-func getEntitlement(userID, projectID uint64) *model.UserEntitlement {
+func getEntitlement(userID uint64, projectID string) *model.UserEntitlement {
 	var ent model.UserEntitlement
 	if err := database.DB.Where("user_id = ? AND project_id = ?", userID, projectID).First(&ent).Error; err != nil {
 		return nil
@@ -229,7 +229,7 @@ func entExpiresAt(ent *model.UserEntitlement) *time.Time {
 }
 
 // entitlementExpiresAt 读取用户在某项目的到期时间（不存在返回 nil）
-func entitlementExpiresAt(userID, projectID uint64) *time.Time {
+func entitlementExpiresAt(userID uint64, projectID string) *time.Time {
 	return entExpiresAt(getEntitlement(userID, projectID))
 }
 

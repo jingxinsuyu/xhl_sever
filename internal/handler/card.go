@@ -91,8 +91,8 @@ type CardListItem struct {
 // ListCards 查询卡密【参数】project_id(必填) type_id keyword(卡密/使用人模糊) status(0/1) start_time end_time
 func (h *Handler) ListCards(c *gin.Context) {
 	page, pageSize := parsePage(c)
-	projectID, _ := strconv.ParseUint(c.Query("project_id"), 10, 64)
-	if projectID == 0 {
+	projectID := strings.TrimSpace(c.Query("project_id"))
+	if projectID == "" {
 		util.Fail(c, util.CodeParamError, "参数错误：project_id 不能为空")
 		return
 	}
