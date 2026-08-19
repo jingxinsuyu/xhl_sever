@@ -61,7 +61,7 @@ func (h *Handler) QrLogin(c *gin.Context) {
 		writeSSE(c, map[string]interface{}{"type": "result", "ok": ok, "errno": errno, "message": msg})
 	}
 
-	sendLog("正在解密账号信息")
+	sendLog("正在解析二维码")
 	username, password, cookie, err := decryptAccountData(req.Data, h.Config.Security.QrLoginAESKey, h.Config.Security.ClientAESKey)
 	if err != nil {
 		sendResult(false, "", "账号数据解密失败："+err.Error())
@@ -71,7 +71,7 @@ func (h *Handler) QrLogin(c *gin.Context) {
 	// 代理池：未配置则不走代理
 	proxyAddr := ""
 	if h.proxyURL() != "" {
-		sendLog("正在加载网络环境")
+		// sendLog("正在加载网络环境")
 		proxyAddr = h.fetchProxy()
 		if proxyAddr == "" {
 			sendResult(false, "", "加载网络环境失败1000")
@@ -79,12 +79,12 @@ func (h *Handler) QrLogin(c *gin.Context) {
 		}
 	}
 
-	sendLog("正在生成环境信息")
+	// sendLog("正在生成环境信息")
 
-	sendLog("正在请求百度确认")
+	sendLog("正在登录")
 	res, err := qrlogin.Confirm(req.LoginURL, cookie, proxyAddr)
 	if err != nil {
-		sendResult(false, "", "请求百度确认失败："+err.Error())
+		sendResult(false, "", "登录失败："+err.Error())
 		return
 	}
 	if res.OK {

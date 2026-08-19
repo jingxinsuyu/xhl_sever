@@ -46,6 +46,7 @@ func Init(cfg *config.Database) error {
 		&model.CardType{},
 		&model.Card{},
 		&model.CkData{},
+		&model.ApiKey{},
 	); err != nil {
 		return fmt.Errorf("自动建表失败: %w", err)
 	}

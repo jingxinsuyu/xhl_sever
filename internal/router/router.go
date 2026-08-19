@@ -50,6 +50,9 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 	// 百度扫码确认（需登录 + 100001 项目会员，SSE 流式）
 	r.POST("/api/xhl/qrlogin", middleware.AuthUser(cfg.JWT.Secret), h.QrLogin)
 
+	// 第三方开放接口（API Key 鉴权，xhlkey 请求头；明文 JSON，按 key 所属项目）
+	r.POST("/api/open/qrlogin", middleware.AuthApiKey(), h.OpenQrLogin)
+
 	user := r.Group("/api/user")
 	{
 		user.POST("/init", middleware.AuthUser(cfg.JWT.Secret), h.UserInit) // 登录有效性校验
@@ -122,6 +125,16 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 		// 代理池配置（所有项目公共，Redis 存储）
 		admin.GET("/proxy-config", middleware.AuthAdmin(cfg.JWT.Secret), h.GetProxyConfig)
 		admin.PUT("/proxy-config", middleware.AuthAdmin(cfg.JWT.Secret), h.SaveProxyConfig)
+
+		// cookie 库（扫码登录存储的百度账号凭证）
+		admin.GET("/ckdata", middleware.AuthAdmin(cfg.JWT.Secret), h.ListCkData)
+		admin.POST("/ckdata/export", middleware.AuthAdmin(cfg.JWT.Secret), h.ExportCkData)
+
+		// 第三方 API Key（按项目发放）
+		admin.GET("/apikeys", middleware.AuthAdmin(cfg.JWT.Secret), h.ListApiKeys)
+		admin.POST("/apikeys", middleware.AuthAdmin(cfg.JWT.Secret), h.CreateApiKey)
+		admin.PUT("/apikeys/:id/status", middleware.AuthAdmin(cfg.JWT.Secret), h.UpdateApiKeyStatus)
+		admin.DELETE("/apikeys/:id", middleware.AuthAdmin(cfg.JWT.Secret), h.DeleteApiKey)
 	}
 
 	return r

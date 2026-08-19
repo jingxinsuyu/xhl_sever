@@ -13,6 +13,9 @@ import (
 // ContextClaims 上下文中的 Claims 键
 const ContextClaims = "claims"
 
+// ContextApiKey 上下文中的 ApiKey 键
+const ContextApiKey = "apikey"
+
 // AuthAdmin 管理员鉴权：校验 Bearer token，必须是 admin 类型
 func AuthAdmin(jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -46,6 +49,37 @@ func AuthSuper(jwtSecret string) gin.HandlerFunc {
 		c.Set(ContextClaims, claims)
 		c.Next()
 	}
+}
+
+// AuthApiKey 第三方开放接口鉴权：校验请求头 xhlkey（API Key，按项目绑定）。
+// 命中启用状态的 key 后，把 *model.ApiKey（含其 ProjectID）放入 context，供接口以该项目为上下文操作。
+func AuthApiKey() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		key := strings.TrimSpace(c.GetHeader("xhlkey"))
+		if key == "" {
+			util.Fail(c, util.CodeUnauthorized, "缺少 xhlkey 请求头")
+			c.Abort()
+			return
+		}
+		var ak model.ApiKey
+		if err := database.DB.Where("key = ? AND status = 1", key).First(&ak).Error; err != nil {
+			util.Fail(c, util.CodeUnauthorized, "xhlkey 无效")
+			c.Abort()
+			return
+		}
+		c.Set(ContextApiKey, &ak)
+		c.Next()
+	}
+}
+
+// GetApiKey 从上下文获取 API Key。
+func GetApiKey(c *gin.Context) *model.ApiKey {
+	if v, ok := c.Get(ContextApiKey); ok {
+		if ak, ok := v.(*model.ApiKey); ok {
+			return ak
+		}
+	}
+	return nil
 }
 
 // AuthUser 用户端鉴权：校验 Bearer token 类型 + token 版本（登录后旧 token 失效）

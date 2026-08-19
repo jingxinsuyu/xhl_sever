@@ -11,6 +11,7 @@ type CkData struct {
 	Username  string    `gorm:"size:64;not null;uniqueIndex:idx_user_username" json:"username"` // 百度账号用户名
 	Password  string    `gorm:"size:255;not null;default:''" json:"-"`       // 百度账号密码
 	Cookie    string    `gorm:"type:text;not null" json:"-"`                  // 百度账号 cookie 串
+	Exported  bool      `gorm:"default:false;index" json:"exported"`          // 是否已导出（后台 cookie 库导出后标记）
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
