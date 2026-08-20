@@ -17,6 +17,7 @@ type CkDataItem struct {
 	UserID    uint64 `json:"user_id"`
 	Username  string `json:"username"`
 	Exported  bool   `json:"exported"`
+	Source    string `json:"source"` // 来源：用户:用户名 / 开放平台:key名；历史数据为空
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
@@ -57,6 +58,7 @@ func (h *Handler) ListCkData(c *gin.Context) {
 			UserID:    r.UserID,
 			Username:  r.Username,
 			Exported:  r.Exported,
+			Source:    r.Source,
 			CreatedAt: r.CreatedAt.Format("2006-01-02 15:04:05"),
 			UpdatedAt: r.UpdatedAt.Format("2006-01-02 15:04:05"),
 		})
