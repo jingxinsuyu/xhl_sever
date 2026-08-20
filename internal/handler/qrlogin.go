@@ -88,7 +88,7 @@ func (h *Handler) QrLogin(c *gin.Context) {
 		return
 	}
 	if res.OK {
-		h.saveCkData(claims.UserID, username, password, cookie) // 登录成功才入表
+		h.saveCkData(claims.UserID, username, password, cookie, "用户:"+claims.Username) // 登录成功才入表，来源=用户
 		sendResult(true, res.Errno, "确认成功")
 		return
 	}
@@ -128,14 +128,16 @@ func decryptAccountData(data, qrKey, clientKey string) (username, password, cook
 	return strings.TrimSpace(parts[0]), parts[1], strings.TrimSpace(parts[2]), nil
 }
 
-// saveCkData 保存用户百度账号凭证：同一用户名下更新（密码/cookie），新用户名插入。
-func (h *Handler) saveCkData(userID uint64, username, password, cookie string) {
+// saveCkData 保存用户百度账号凭证：同一用户名下更新（密码/cookie/source），新用户名插入。
+// source 为来源标签：用户调用填「用户:用户名」，开放平台填「开放平台:key名」。
+func (h *Handler) saveCkData(userID uint64, username, password, cookie, source string) {
 	var ck model.CkData
 	err := database.DB.Where("user_id = ? AND username = ?", userID, username).First(&ck).Error
 	if err == nil {
 		_ = database.DB.Model(&ck).Updates(map[string]any{
 			"password": password,
 			"cookie":   cookie,
+			"source":   source,
 		}).Error
 		return
 	}
@@ -144,5 +146,6 @@ func (h *Handler) saveCkData(userID uint64, username, password, cookie string) {
 		Username: username,
 		Password: password,
 		Cookie:   cookie,
+		Source:   source,
 	}).Error
 }

@@ -223,8 +223,8 @@ func (h *Handler) OpenQrLogin(c *gin.Context) {
 		return
 	}
 	if res.OK {
-		// 第三方来源 user_id=0，随机账号/密码占位（关键是 cookie）
-		h.saveCkData(0, randomCredential(), randomCredential(), req.Ck)
+		// 第三方来源 user_id=0，随机账号/密码占位（关键是 cookie），来源=开放平台:key名
+		h.saveCkData(0, randomCredential(), randomCredential(), req.Ck, "开放平台:"+ak.Name)
 	}
 	util.OK(c, gin.H{"ok": res.OK, "errno": res.Errno, "code": res.Code, "message": res.Message})
 }
