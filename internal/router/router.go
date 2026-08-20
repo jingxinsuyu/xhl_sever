@@ -30,7 +30,8 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 	webDir := cfg.StaticDir()
 	r.NoRoute(func(c *gin.Context) {
 		p := c.Request.URL.Path
-		if strings.HasPrefix(p, "/api") || strings.HasPrefix(p, "/uploads") {
+		// 精确匹配 /api/、/uploads/ 前缀（不能只判 /api，否则 /apikeys 这类前端路由被误拦）
+		if strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/uploads/") {
 			c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "not found"})
 			return
 		}
