@@ -2,6 +2,7 @@
 
 > 本文档覆盖后端全部 HTTP 接口，按「公共接口」与「管理后台接口」分组。
 > 接口清单以 `internal/router/router.go` 为准。
+> **第三方开放接口（API Key 鉴权）见 [OPEN_API.md](OPEN_API.md)。**
 
 ---
 

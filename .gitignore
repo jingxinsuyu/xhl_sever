@@ -20,6 +20,7 @@ project_id_migration_backup_*.json
 !README.md
 !DEPLOY.md
 !API.md
+!OPEN_API.md
 
 # ===== 本地/工具设置 =====
 .claude/settings.local.json

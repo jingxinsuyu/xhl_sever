@@ -246,7 +246,7 @@ func uniqueApiKey() (string, error) {
 			return "", err
 		}
 		var count int64
-		if err := database.DB.Model(&model.ApiKey{}).Where("key = ?", key).Count(&count).Error; err != nil {
+		if err := database.DB.Model(&model.ApiKey{}).Where("`key` = ?", key).Count(&count).Error; err != nil {
 			return "", err
 		}
 		if count == 0 {

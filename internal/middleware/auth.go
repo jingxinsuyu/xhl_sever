@@ -62,7 +62,7 @@ func AuthApiKey() gin.HandlerFunc {
 			return
 		}
 		var ak model.ApiKey
-		if err := database.DB.Where("key = ? AND status = 1", key).First(&ak).Error; err != nil {
+		if err := database.DB.Where("`key` = ? AND status = 1", key).First(&ak).Error; err != nil {
 			util.Fail(c, util.CodeUnauthorized, "xhlkey 无效")
 			c.Abort()
 			return
