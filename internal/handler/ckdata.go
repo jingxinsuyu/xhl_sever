@@ -23,7 +23,7 @@ type CkDataItem struct {
 }
 
 // ListCkData 后台 cookie 库分页查询。
-// 参数：keyword 用户名模糊，exported 筛选导出状态（0 未导出 / 1 已导出，缺省全部），page、page_size 分页。
+// 参数：keyword 模糊匹配用户名或来源（用户:xxx / 开放平台:xxx），exported 筛选导出状态（0 未导出 / 1 已导出，缺省全部），page、page_size 分页。
 func (h *Handler) ListCkData(c *gin.Context) {
 	page, pageSize := parsePage(c)
 	keyword := strings.TrimSpace(c.Query("keyword"))
@@ -31,7 +31,8 @@ func (h *Handler) ListCkData(c *gin.Context) {
 
 	query := database.DB.Model(&model.CkData{})
 	if keyword != "" {
-		query = query.Where("username LIKE ?", "%"+keyword+"%")
+		like := "%" + keyword + "%"
+		query = query.Where("(username LIKE ? OR source LIKE ?)", like, like)
 	}
 	if exported == "0" {
 		query = query.Where("exported = ?", false)

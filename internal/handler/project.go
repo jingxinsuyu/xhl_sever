@@ -19,6 +19,7 @@ type CreateProjectRequest struct {
 	Remark      string `json:"remark"`
 	LoginLimit  int    `json:"login_limit"`  // 0 不限制；N 该用户今日只能登录 N 次
 	UnbindLimit int    `json:"unbind_limit"` // 0 不限制；N 该用户今日只能自助解绑 N 次
+	CallLimit   int    `json:"call_limit"`   // 0 不限制；N 该用户今日只能调用 N 次
 }
 
 // UpdateProjectRequest 编辑项目请求
@@ -27,6 +28,7 @@ type UpdateProjectRequest struct {
 	Remark      string `json:"remark"`
 	LoginLimit  int    `json:"login_limit"`
 	UnbindLimit int    `json:"unbind_limit"`
+	CallLimit   int    `json:"call_limit"`
 }
 
 // ProjectResponse 项目列表项
@@ -36,6 +38,7 @@ type ProjectResponse struct {
 	Remark      string `json:"remark"`
 	LoginLimit  int    `json:"login_limit"`
 	UnbindLimit int    `json:"unbind_limit"`
+	CallLimit   int    `json:"call_limit"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 }
@@ -70,6 +73,7 @@ func (h *Handler) ListProjects(c *gin.Context) {
 			Remark:      p.Remark,
 			LoginLimit:  p.LoginLimit,
 			UnbindLimit: p.UnbindLimit,
+			CallLimit:   p.CallLimit,
 			CreatedAt:   p.CreatedAt.Format("2006-01-02 15:04:05"),
 			UpdatedAt:   p.UpdatedAt.Format("2006-01-02 15:04:05"),
 		})
@@ -94,8 +98,8 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		util.Fail(c, util.CodeParamError, "参数错误：项目名不能为空")
 		return
 	}
-	if req.LoginLimit < 0 || req.UnbindLimit < 0 {
-		util.Fail(c, util.CodeParamError, "login_limit / unbind_limit 不能为负数")
+	if req.LoginLimit < 0 || req.UnbindLimit < 0 || req.CallLimit < 0 {
+		util.Fail(c, util.CodeParamError, "login_limit / unbind_limit / call_limit 不能为负数")
 		return
 	}
 
@@ -106,7 +110,7 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		return
 	}
 
-	p := model.Project{ID: req.ID, Name: req.Name, Remark: req.Remark, LoginLimit: req.LoginLimit, UnbindLimit: req.UnbindLimit}
+	p := model.Project{ID: req.ID, Name: req.Name, Remark: req.Remark, LoginLimit: req.LoginLimit, UnbindLimit: req.UnbindLimit, CallLimit: req.CallLimit}
 	if err := database.DB.Create(&p).Error; err != nil {
 		util.Fail(c, util.CodeDBError, "创建失败")
 		return
@@ -131,8 +135,8 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		util.Fail(c, util.CodeParamError, "参数错误：项目名不能为空")
 		return
 	}
-	if req.LoginLimit < 0 || req.UnbindLimit < 0 {
-		util.Fail(c, util.CodeParamError, "login_limit / unbind_limit 不能为负数")
+	if req.LoginLimit < 0 || req.UnbindLimit < 0 || req.CallLimit < 0 {
+		util.Fail(c, util.CodeParamError, "login_limit / unbind_limit / call_limit 不能为负数")
 		return
 	}
 
@@ -159,6 +163,7 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 		"remark":       req.Remark,
 		"login_limit":  req.LoginLimit,
 		"unbind_limit": req.UnbindLimit,
+		"call_limit":   req.CallLimit,
 	}).Error; err != nil {
 		util.Fail(c, util.CodeDBError, "修改失败")
 		return

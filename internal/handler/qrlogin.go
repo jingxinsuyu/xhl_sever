@@ -52,6 +52,15 @@ func (h *Handler) QrLogin(c *gin.Context) {
 		return
 	}
 
+	// 每日调用次数限制（按接口计数）：CallLimit > 0 时计数并超限拦截（0 = 不限制）
+	if project.CallLimit > 0 {
+		count := h.recordDailyCall(qrLoginProjectID, claims.UserID, "qrlogin")
+		if count > int64(project.CallLimit) {
+			util.Fail(c, util.CodeCallLimitExceed, "已达到每日使用上限")
+			return
+		}
+	}
+
 	// 开启 SSE 流
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")

@@ -103,6 +103,34 @@ func (h *Handler) todayLoginCount(projectID string, userID uint64) int64 {
 	return n
 }
 
+// recordDailyCall 记录该用户今日在项目的某接口调用次数（api 为接口标识，如 qrlogin）。
+// 按接口分开计数，共用项目的 CallLimit 上限。Redis INCR，TTL 至当日结束；redis 出错时返回 0（不阻断调用）。
+func (h *Handler) recordDailyCall(projectID string, userID uint64, api string) int64 {
+	date := timeNow().Format("20060102")
+	ctx := context.Background()
+	key := "call:daily:" + projectID + ":" + strconv.FormatUint(userID, 10) + ":" + api + ":" + date
+	count, err := h.Redis.Incr(ctx, key).Result()
+	if err != nil {
+		return 0
+	}
+	if count == 1 {
+		endOfDay := time.Date(timeNow().Year(), timeNow().Month(), timeNow().Day(), 23, 59, 59, 0, timeNow().Location())
+		h.Redis.Expire(ctx, key, time.Until(endOfDay.Add(time.Second)))
+	}
+	return count
+}
+
+// todayCallCount 查询该用户今日在某接口的调用次数（无记录返回 0）。
+func (h *Handler) todayCallCount(projectID string, userID uint64, api string) int64 {
+	date := timeNow().Format("20060102")
+	key := "call:daily:" + projectID + ":" + strconv.FormatUint(userID, 10) + ":" + api + ":" + date
+	n, err := h.Redis.Get(context.Background(), key).Int64()
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
 // clearDailyLogin 清除该用户今日登录计数。projectID 为空清除该用户全部项目。
 func (h *Handler) clearDailyLogin(projectID string, userID uint64) error {
 	ctx := context.Background()

@@ -214,6 +214,7 @@ func Confirm(qrContent, cookie, proxyAddr string) (Result, error) {
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
+	fmt.Printf("[confirm]:%s \n", string(body))
 	if err != nil {
 		return Result{}, errors.New("读取百度响应失败") // 不暴露内部错误
 	}
@@ -221,7 +222,17 @@ func Confirm(qrContent, cookie, proxyAddr string) (Result, error) {
 	return parseSapiResp(body)
 }
 
+// errnoMessages 扫码确认 errno → 中文友好提示（对齐 QrAppLoginResult.java）。
+// errno=1 二维码已过期 / 2 确认方 BDUSS 已过期 / 3 用户尚未正常化 / 160102 BDUSS 为空。
+var errnoMessages = map[int]string{
+	1:      "二维码已过期，请刷新二维码后重试",
+	2:      "登录状态已失效（BDUSS 过期），请重新登录",
+	3:      "用户尚未正常化",
+	160102: "BDUSS 为空，cookie 无效",
+}
+
 // parseSapiResp 解析 sapi 响应。成功判定与 Python 一致：code in ("0","110000") 或 errno==0。
+// 失败时优先用百度 message；为空则按 errno 映射为中文友好提示。
 func parseSapiResp(body []byte) (Result, error) {
 	var j map[string]interface{}
 	if err := json.Unmarshal(body, &j); err != nil {
@@ -237,6 +248,11 @@ func parseSapiResp(body []byte) (Result, error) {
 		msg = m
 	} else if m, ok := j["error_msg"].(string); ok && m != "" {
 		msg = m
+	}
+	if msg == "" {
+		if m, ok := errnoMessages[errno]; ok {
+			msg = m
+		}
 	}
 
 	ok := code == "0" || code == "110000" || errno == 0

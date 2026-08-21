@@ -27,6 +27,7 @@ const (
 	CodeNoPermission     = 1016 // 无该项目权限
 	CodeUnbindLimitExceed = 1017 // 今日自助解绑次数已达上限
 	CodeMembershipExpired = 1018 // 会员已过期
+	CodeCallLimitExceed   = 1019 // 今日调用次数已达上限
 )
 
 // Response 统一响应结构

@@ -182,3 +182,27 @@ func TestParseSapiResp(t *testing.T) {
 		t.Fatalf("errno!=0 应失败: %+v err=%v", res, err)
 	}
 }
+
+// TestParseSapiRespErrnoMessage errno 已知错误码应映射中文友好提示。
+func TestParseSapiRespErrnoMessage(t *testing.T) {
+	cases := map[string]string{
+		`{"errno":1}`:          "二维码已过期",
+		`{"errno":2}`:          "BDUSS 过期",
+		`{"errno":3}`:          "用户尚未正常化",
+		`{"errno":160102}`:     "BDUSS 为空",
+		`{"errno":99999}`:      "", // 未知 errno 无映射
+		`{"errno":2,"message":"百度自定义"}`: "百度自定义", // 有 message 优先
+	}
+	for in, want := range cases {
+		res, err := parseSapiResp([]byte(in))
+		if err != nil {
+			t.Fatalf("parseSapiResp(%s) error: %v", in, err)
+		}
+		if res.OK {
+			t.Fatalf("errno!=0 不应成功: %s", in)
+		}
+		if !strings.Contains(res.Message, want) {
+			t.Errorf("parseSapiResp(%s) message = %q, want 含 %q", in, res.Message, want)
+		}
+	}
+}

@@ -96,19 +96,21 @@ func DefaultDeviceInfo() DeviceInfo {
 
 // Device 完整设备信息。
 type Device struct {
-	Cuid       string            `json:"cuid"`
-	Fuid       string            `json:"fuid"`
-	Gid        string            `json:"gid"`
-	LogTraceID string            `json:"log_trace_id"`
-	PassID     string            `json:"pass_id"`
-	Rinfo      map[string]string `json:"rinfo"`
-	Width      int               `json:"width"`
-	Height     int               `json:"height"`
-	Info       DeviceInfo        `json:"info"`
-	Xyus       string            `json:"xyus"`    // sofire xyus: MD5(UUID).upper() + "|0"
-	Xyusec     string            `json:"xyusec"`  // Base64(ac(xyus)) — sofire 加密后的设备串
-	Zid30      string            `json:"zid_30b"` // 30B zid (xytk_m): 22B 指纹 + 8B 尾
-	Zid65      string            `json:"zid_65b"` // 65B zid (s_to_re_d.token): base64url(32B/32B)
+	Cuid          string            `json:"cuid"`
+	Fuid          string            `json:"fuid"`
+	Gid           string            `json:"gid"`
+	LogTraceID    string            `json:"log_trace_id"`
+	PassID        string            `json:"pass_id"`
+	Rinfo         map[string]string `json:"rinfo"`
+	Width         int               `json:"width"`
+	Height        int               `json:"height"`
+	Info          DeviceInfo        `json:"info"`
+	Xyus          string            `json:"xyus"`          // sofire xyus: MD5(UUID).upper() + "|0"
+	Xyusec        string            `json:"xyusec"`        // Base64(ac(xyus)) — sofire 加密后的设备串
+	Zid30         string            `json:"zid_30b"`       // 30B zid (xytk_m): 22B 指纹 + 8B 尾
+	Zid65         string            `json:"zid_65b"`       // 65B zid (s_to_re_d.token): base64url(32B/32B)
+	Fingerprint22 string            `json:"fingerprint22"` // 22B 设备指纹 (每号独立, 需持久化, 全程不变)
+	Seg1          string            `json:"seg1"`          // 32B seg1 (每号独立, 需持久化, 全程不变)
 }
 
 // ================================================================
@@ -290,51 +292,51 @@ type phoneProfile struct {
 // phoneProfiles 内置手机型号池(UA/GPU/分辨率与机型一一对应)。
 var phoneProfiles = []phoneProfile{
 	{
-		name: "SM-A5260(骁龙778G)",
-		ua:   "Mozilla/5.0 (Linux; Android 12; SM-A5260 Build/V417IR; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.154 Mobile Safari/537.36 tieba/22.9.1.0",
-		gpu:  "Qualcomm~Adreno (TM) 642L",
+		name:  "SM-A5260(骁龙778G)",
+		ua:    "Mozilla/5.0 (Linux; Android 12; SM-A5260 Build/V417IR; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.154 Mobile Safari/537.36 tieba/22.9.1.0",
+		gpu:   "Qualcomm~Adreno (TM) 642L",
 		width: 1080, height: 2400,
 	},
 	{
-		name: "Pixel 7(Google Tensor G2)",
-		ua:   "Mozilla/5.0 (Linux; Android 13; Pixel 7 Build/TQ3A.230805.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 tieba/22.9.1.0",
-		gpu:  "Google~Mali-G710",
+		name:  "Pixel 7(Google Tensor G2)",
+		ua:    "Mozilla/5.0 (Linux; Android 13; Pixel 7 Build/TQ3A.230805.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 tieba/22.9.1.0",
+		gpu:   "Google~Mali-G710",
 		width: 1080, height: 2400,
 	},
 	{
-		name: "小米13(骁龙8Gen2)",
-		ua:   "Mozilla/5.0 (Linux; Android 13; 2201123C Build/TKQ1.220829.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 tieba/22.9.1.0",
-		gpu:  "Qualcomm~Adreno (TM) 740",
+		name:  "小米13(骁龙8Gen2)",
+		ua:    "Mozilla/5.0 (Linux; Android 13; 2201123C Build/TKQ1.220829.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 tieba/22.9.1.0",
+		gpu:   "Qualcomm~Adreno (TM) 740",
 		width: 1080, height: 2400,
 	},
 	{
-		name: "红米Note12Pro(天玑1080)",
-		ua:   "Mozilla/5.0 (Linux; Android 13; 22101316C Build/TKQ1.221013.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/114.0.0.0 Mobile Safari/537.36 tieba/22.9.1.0",
-		gpu:  "ARM~Mali-G68",
+		name:  "红米Note12Pro(天玑1080)",
+		ua:    "Mozilla/5.0 (Linux; Android 13; 22101316C Build/TKQ1.221013.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/114.0.0.0 Mobile Safari/537.36 tieba/22.9.1.0",
+		gpu:   "ARM~Mali-G68",
 		width: 1080, height: 2400,
 	},
 	{
-		name: "Mate60Pro(麒麟9000S)",
-		ua:   "Mozilla/5.0 (Linux; Android 12; ALN-AL00 Build/HUAWEIALN-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.0.0 Mobile Safari/537.36 tieba/22.9.1.0",
-		gpu:  "Huawei~Mali-G710",
+		name:  "Mate60Pro(麒麟9000S)",
+		ua:    "Mozilla/5.0 (Linux; Android 12; ALN-AL00 Build/HUAWEIALN-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.0.0 Mobile Safari/537.36 tieba/22.9.1.0",
+		gpu:   "Huawei~Mali-G710",
 		width: 1260, height: 2720,
 	},
 	{
-		name: "OPPO Find X6(天玑9200)",
-		ua:   "Mozilla/5.0 (Linux; Android 13; PGFM10 Build/TP1A.220905.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/115.0.0.0 Mobile Safari/537.36 tieba/22.9.1.0",
-		gpu:  "ARM~Mali-G715",
+		name:  "OPPO Find X6(天玑9200)",
+		ua:    "Mozilla/5.0 (Linux; Android 13; PGFM10 Build/TP1A.220905.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/115.0.0.0 Mobile Safari/537.36 tieba/22.9.1.0",
+		gpu:   "ARM~Mali-G715",
 		width: 1260, height: 2772,
 	},
 	{
-		name: "vivo X90(天玑9200)",
-		ua:   "Mozilla/5.0 (Linux; Android 13; V2241A Build/TP1A.220624.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/115.0.0.0 Mobile Safari/537.36 tieba/22.9.1.0",
-		gpu:  "ARM~Mali-G715",
+		name:  "vivo X90(天玑9200)",
+		ua:    "Mozilla/5.0 (Linux; Android 13; V2241A Build/TP1A.220624.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/115.0.0.0 Mobile Safari/537.36 tieba/22.9.1.0",
+		gpu:   "ARM~Mali-G715",
 		width: 1260, height: 2800,
 	},
 	{
-		name: "荣耀90(骁龙7Gen1)",
-		ua:   "Mozilla/5.0 (Linux; Android 13; REA-NX9 Build/HONORREA-NX9; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/115.0.0.0 Mobile Safari/537.36 tieba/22.9.1.0",
-		gpu:  "Qualcomm~Adreno (TM) 644",
+		name:  "荣耀90(骁龙7Gen1)",
+		ua:    "Mozilla/5.0 (Linux; Android 13; REA-NX9 Build/HONORREA-NX9; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/115.0.0.0 Mobile Safari/537.36 tieba/22.9.1.0",
+		gpu:   "Qualcomm~Adreno (TM) 644",
 		width: 1200, height: 2664,
 	},
 }
@@ -349,7 +351,15 @@ func randomPhoneProfile() phoneProfile {
 // ================================================================
 
 // New 创建随机设备指纹 (随机手机型号: UA/GPU/分辨率与机型一致; 含 sofire zid 全链路)。
+// ★ 批量注册必读: 每号随机生成独立 22B 指纹 + 32B seg1 (UniqueFingerprint=true),
+// 否则所有号共用固定模板的"设备身份", 服务端聚类识别批量注册, 1h 复核必死。
 func New() (*Device, error) {
+	return NewUnique(true)
+}
+
+// NewUnique 创建随机设备; unique=true 时每号独立 22B 指纹 + seg1。
+// 注册/使用账号时必须把 Fingerprint22/Seg1 持久化, 同一号全程用同一套, 不能换。
+func NewUnique(unique bool) (*Device, error) {
 	profile := randomPhoneProfile()
 	info := DefaultDeviceInfo()
 	info.UserAgent = profile.ua
@@ -371,28 +381,51 @@ func New() (*Device, error) {
 	if err != nil {
 		return nil, err
 	}
-	zid30, err := genZid30(nil)
-	if err != nil {
-		return nil, err
-	}
-	zid65, err := genZid65(cuid, "")
-	if err != nil {
-		return nil, err
+
+	var zid30, zid65, fp22, seg1 string
+	if unique {
+		fp := make([]byte, 22)
+		rand.Read(fp)
+		fp22 = strings.ToUpper(hex.EncodeToString(fp))
+		seg1b := make([]byte, 32)
+		rand.Read(seg1b)
+		seg1 = hex.EncodeToString(seg1b)
+		zid30, err = genZid30(fp)
+		if err != nil {
+			return nil, err
+		}
+		zid65, err = genZid65(cuid, seg1)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		fp22 = zidFingerprint22
+		seg1 = zidSeg1Current
+		zid30, err = genZid30(nil)
+		if err != nil {
+			return nil, err
+		}
+		zid65, err = genZid65(cuid, "")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &Device{
-		Cuid:       cuid,
-		Fuid:       fuid,
-		Gid:        generateGid(),
-		LogTraceID: generateLogTraceID(),
-		PassID:     generatePassID(),
-		Rinfo:      generateRinfo(fuid),
-		Width:      profile.width,
-		Height:     profile.height,
-		Info:       info,
-		Xyus:       xyus,
-		Xyusec:     xyusec,
-		Zid30:      zid30,
-		Zid65:      zid65,
+		Cuid:          cuid,
+		Fuid:          fuid,
+		Gid:           generateGid(),
+		LogTraceID:    generateLogTraceID(),
+		PassID:        generatePassID(),
+		Rinfo:         generateRinfo(fuid),
+		Width:         profile.width,
+		Height:        profile.height,
+		Info:          info,
+		Xyus:          xyus,
+		Xyusec:        xyusec,
+		Zid30:         zid30,
+		Zid65:         zid65,
+		Fingerprint22: fp22,
+		Seg1:          seg1,
 	}, nil
 }
