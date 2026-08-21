@@ -197,3 +197,109 @@ python deploy.py frontend    # 上传 ../xhl-admin/web → 静态卷挂载，无
 | 扫码确认接口报外部 HTTPS 错误 | 确认镜像装了 `ca-certificates`（Dockerfile 已含） |
 | 旧客户端登录报「项目不存在」 | 项目 id 已改为字符串，需升级客户端改用新 project_id |
 | SFTP 上传后二进制无执行权限 | 执行 `chmod +x xhl_sever-linux`（SFTP 会丢可执行位） |
+
+---
+
+## 6. 完整部署操作手册（改完代码 → 上线）
+
+> 以下为每次改完代码后的完整流程，按顺序执行即可。
+
+### 6.1 前置环境（本地 Windows）
+
+| 依赖 | 说明 |
+|---|---|
+| Go | 编译后端；`go build ./...` / `go vet ./...` / `go test ./...` 全绿再继续 |
+| 本地 MySQL | `127.0.0.1:3306`，库 `hlong`，root/`320326..`（开发 config.yaml 用） |
+| 本地 Redis | 指向 `192.168.1.14:6379`（开发 config.yaml 里配置） |
+| Node/pnpm | 前端构建：`cd ../xhl-admin && pnpm build`（产物输出到 `web/`） |
+| Python + paramiko | 服务器直连脚本用（deploy.py / 临时部署脚本） |
+
+### 6.2 本地验证
+
+```bash
+# 1. 后端构建 + 测试
+cd xhl_sever
+go build ./... && go vet ./... && go test ./...
+
+# 2. 前端构建（vue-tsc 类型检查 + vite build → xhl-admin/web/）
+cd ../xhl-admin && pnpm build
+
+# 3. 后端托管最新 web（根目录 web/ 要与 xhl-admin/web 一致）
+cd ../xhl_sever
+rm -rf web/* && cp -r ../xhl-admin/web/* web/
+
+# 4. 启动本地后端（连本地 MySQL/Redis，端口 8080）
+go run . > _local_run.log 2>&1 &
+curl -s http://127.0.0.1:8080/api/health   # {"code":0,"message":"ok"}
+```
+
+> 浏览器访问 `http://127.0.0.1:8080` 手动测试。改代码后本地后端**必须重启**（`go run` 不会热加载），否则测的是旧逻辑。
+
+### 6.3 提交 + 推送（git 走本地代理 7897）
+
+```bash
+# 确认无敏感文件入库：config.yaml / deploy.py / 二进制 / web/ / *.log 均在 .gitignore
+git add -A
+git diff --cached --name-only | grep -iE 'config\.yaml|deploy\.py|xhl_sever-linux|web/|\.log$'   # 应为空
+
+git commit -m "改动说明"
+git push origin main
+```
+
+> **代理注意**：GitHub 直连被重置，git 走 `127.0.0.1:7897`（已配在 `.git/config`）。
+> 若 push 报 `schannel: failed to receive handshake` 或 `TLS connect error: unexpected eof`，
+> 是代理隧道瞬时不稳定 —— 等代理恢复后**重试**即可（多试几次会成功），不用改任何配置。
+
+### 6.4 部署到服务器
+
+```bash
+# 1. 交叉编译 linux 二进制
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o xhl_sever-linux .
+
+# 2. 确认本地 web/ 是最新构建（若刚改过前端，同步）
+diff -rq web/ ../xhl-admin/web/ >/dev/null && echo OK || { rm -rf web/* && cp -r ../xhl-admin/web/* web/; }
+
+# 3. 写临时部署脚本（paramiko 密码直连，见下方模板）并执行：
+#    上传 xhl_sever-linux → /worker/xhl_sever/xhl_sever-linux
+#    上传 web/ → /worker/xhl_sever/web（前端有改动才需要）
+#    服务器执行：cd /worker && docker compose up -d --build
+#    验证：curl http://127.0.0.1:8888/api/health  → {"code":0,"message":"ok"}
+#    新表/新列由 AutoMigrate 自动创建（如 apikey 表、project.call_limit 列）
+```
+
+**部署脚本要点**（服务器：`103.36.223.143:512`，root，密码在 deploy.py 里）：
+
+```python
+HOST="103.36.223.143"; PORT=512; USER="root"; PASS="<deploy.py 里的密码>"
+# sftp_upload(local, remote) 上传文件；sftp_upload_tree 上传目录
+# ssh("cd /worker && docker compose up -d --build 2>&1 | tail -15 && docker compose ps && curl -s http://127.0.0.1:8888/api/health")
+```
+
+### 6.5 验证
+
+```bash
+# 服务器上（SSH 进去）：
+curl -s http://127.0.0.1:8888/api/health                 # 后端健康
+curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8888/   # 前端 200
+docker logs xhl-sever --tail 20                           # 看日志有无报错
+# 新列检查示例：
+docker exec xhl-mysql mysql -uroot -p0KUN0ZsfXGETUpU0 hlong -e "SHOW COLUMNS FROM project LIKE 'call_limit'"
+```
+
+### 6.6 回滚
+
+- 数据快照：项目 id 迁移时的备份在 `/worker/xhl_sever/project_id_migration_backup_*.json`。
+- 二进制回滚：用旧 `xhl_sever-linux` 重新上传 → `docker compose up -d --build` 即可。
+- `AutoMigrate` 只加列不改列不删列，不会破坏已有数据。
+
+### 6.7 常用服务器信息
+
+| 项 | 值 |
+|---|---|
+| 服务器 | `103.36.223.143`，SSH/SFTP 端口 `512`（root） |
+| 后端目录 | `/worker/xhl_sever`（config.yaml / 二进制 / web/ / uploads/） |
+| compose | `/worker/docker-compose.yml` |
+| MySQL | 容器 `xhl-mysql`，库 `hlong`，root/`0KUN0ZsfXGETUpU0`，仅绑 127.0.0.1:3306 |
+| Redis | 容器 `xhl-redis`，密码 `9sRcLHkhLWgKZZsv` |
+| 后端端口 | 8888（前端同源，Gin 托管 dist） |
+| 一键部署 | `python deploy.py backend`（上传二进制+重建重启）/ `python deploy.py frontend`（仅 web） |
