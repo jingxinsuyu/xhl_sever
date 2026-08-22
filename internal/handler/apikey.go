@@ -361,6 +361,22 @@ func (h *Handler) OpenQrLogin(c *gin.Context) {
 	util.OK(c, gin.H{"ok": res.OK, "errno": res.Errno, "code": res.Code, "message": res.Message, "balance": ak.Balance})
 }
 
+// OpenApiKeyBalance 查询开放平台 API Key 剩余积分。
+// GET /api/open/balance?key=sk-xxx；key 不存在返回 1004。
+func (h *Handler) OpenApiKeyBalance(c *gin.Context) {
+	key := strings.TrimSpace(c.Query("key"))
+	if key == "" {
+		util.Fail(c, util.CodeParamError, "参数错误：key 不能为空")
+		return
+	}
+	var ak model.ApiKey
+	if err := database.DB.Where("`key` = ?", key).First(&ak).Error; err != nil {
+		util.Fail(c, util.CodeNotFound, "API Key 不存在")
+		return
+	}
+	util.OK(c, gin.H{"key": ak.Key, "balance": ak.Balance})
+}
+
 // generateApiKey 生成 DeepSeek 风格 key：sk- + 32 位 hex（16 随机字节）。
 func generateApiKey() (string, error) {
 	b := make([]byte, 16)

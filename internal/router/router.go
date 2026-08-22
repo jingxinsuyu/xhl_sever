@@ -54,6 +54,9 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 	// 第三方开放接口（API Key 鉴权，xhlkey 请求头；明文 JSON，按 key 所属项目）
 	r.POST("/api/open/qrlogin", middleware.AuthApiKey(), h.OpenQrLogin)
 
+	// 开放平台剩余积分查询（query 传 key，无需鉴权）
+	r.GET("/api/open/balance", h.OpenApiKeyBalance)
+
 	user := r.Group("/api/user")
 	{
 		user.POST("/init", middleware.AuthUser(cfg.JWT.Secret), h.UserInit) // 登录有效性校验
