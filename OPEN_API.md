@@ -51,8 +51,9 @@ xhlkey: sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 | 0 | 成功 |
 | 1001 | 参数错误 |
 | 1002 | 缺少 / 无效 / 已禁用的 xhlkey |
-| 1004 | 项目不存在或已停用 |
+| 1004 | 项目不存在 / key 不存在 |
 | 1016 | 服务端网络环境加载失败 |
+| 1020 | 积分不足 |
 
 ---
 
@@ -127,7 +128,49 @@ Content-Type: application/json
 
 ---
 
-## 4. 调用示例
+## 4. 查询剩余积分
+
+### 4.1 接口
+
+```
+GET /api/open/balance?key=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+> 功能：查询指定 API Key 的剩余积分。每次扫码确认（`/api/open/qrlogin`）按配置扣除积分（当前 1 积分/次，调用即扣）；积分不足返回 `1020`。
+> 本接口无需鉴权头，直接以 query 参数传 key。
+
+### 4.2 请求参数
+
+| 参数 | 必填 | 说明 |
+|---|---|---|
+| `key` | 是 | API Key（`sk-` 开头） |
+
+### 4.3 成功响应
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "key": "sk-56f50dc7d387f7a1352a06a42758128f",
+    "balance": 9985
+  }
+}
+```
+
+| 字段 | 说明 |
+|---|---|
+| `key` | 查询的 API Key |
+| `balance` | 剩余积分 |
+
+### 4.4 失败响应
+
+- key 为空：`{ "code": 1001, "message": "参数错误：key 不能为空" }`
+- key 不存在 / 已删除：`{ "code": 1004, "message": "API Key 不存在" }`
+
+---
+
+## 5. 调用示例
 
 ### cURL
 
@@ -156,10 +199,28 @@ else:
     print("失败:", resp.get("message") or resp["data"].get("message"))
 ```
 
+### 查询余额
+
+```bash
+curl "http://103.36.223.143:8888/api/open/balance?key=sk-56f50dc7d387f7a1352a06a42758128f"
+```
+
+```python
+import requests
+
+key = "sk-56f50dc7d387f7a1352a06a42758128f"
+resp = requests.get(f"http://103.36.223.143:8888/api/open/balance?key={key}", timeout=30).json()
+if resp["code"] == 0:
+    print(f"剩余积分: {resp['data']['balance']}")
+else:
+    print("查询失败:", resp.get("message"))
+```
+
 ---
 
-## 5. 注意事项
+## 6. 注意事项
 
 1. **BDUSS 必填**：`ck` 中缺少 `BDUSS` 时确认会失败（`data.ok=false`）。
 2. **二维码一次性**：一个二维码确认成功后即被消费，再次确认同一 `qrUrl` 会失败；应在每次检测到新二维码时传最新的 `qrUrl`。
 3. **调用频率**：请勿高频空跑，异常调用可能触发服务端风控。
+4. **积分消耗**：每次调用 `/api/open/qrlogin` 扣 1 积分（调用即扣，与确认成败无关）；积分不足返回 `1020`。可通过 `GET /api/open/balance` 查询余额，联系管理员充值。
