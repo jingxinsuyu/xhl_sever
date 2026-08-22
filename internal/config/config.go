@@ -64,12 +64,18 @@ type Upload struct {
 	BaseURL string `yaml:"base_url"` // 静态资源对外访问基础地址，如 http://127.0.0.1:8080
 }
 
+// Cost 扣费配置
+type Cost struct {
+	OpenQrLoginCost int `yaml:"open_qrlogin_cost"` // 开放平台每次扫码确认扣费积分（调用即扣，0=不扣）
+}
+
 // Config 全局配置
 type Config struct {
 	Server     Server     `yaml:"server"`
 	Database   Database   `yaml:"database"`
 	Redis      Redis      `yaml:"redis"`
 	Security   Security   `yaml:"security"`
+	Cost       Cost       `yaml:"cost"`
 	JWT        JWT        `yaml:"jwt"`
 	SuperAdmin SuperAdmin `yaml:"super_admin"`
 	Upload     Upload     `yaml:"upload"`

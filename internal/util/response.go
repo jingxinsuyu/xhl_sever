@@ -28,6 +28,7 @@ const (
 	CodeUnbindLimitExceed = 1017 // 今日自助解绑次数已达上限
 	CodeMembershipExpired = 1018 // 会员已过期
 	CodeCallLimitExceed   = 1019 // 今日调用次数已达上限
+	CodeInsufficientBalance = 1020 // 积分不足
 )
 
 // Response 统一响应结构

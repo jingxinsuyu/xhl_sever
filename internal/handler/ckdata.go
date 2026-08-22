@@ -68,11 +68,14 @@ func (h *Handler) ListCkData(c *gin.Context) {
 }
 
 // CkDataExportRequest 导出请求：
-//   - ids 非空 → 导出勾选的这几条（未导出的）
-//   - ids 为空 → 导出最早的 count 条未导出记录
+//   - ids 非空 → 导出勾选的这几条（不筛状态/来源）
+//   - ids 为空 → 筛选导出：source_type/source_value 来源筛选、exported 状态筛选、count 数量
 type CkDataExportRequest struct {
-	Count int      `json:"count"` // 按数量导出（未勾选时生效）
-	IDs   []uint64 `json:"ids"`   // 勾选导出的记录 id
+	Count       int      `json:"count"`        // 导出数量（筛选导出时）
+	IDs         []uint64 `json:"ids"`          // 勾选导出的记录 id
+	SourceType  string   `json:"source_type"`  // 来源类型：all / open / user（筛选导出）
+	SourceValue string   `json:"source_value"` // 来源值：开放平台:xxx 或 用户:xxx
+	Exported    *bool    `json:"exported"`     // nil=全部；true=已导出；false=未导出
 }
 
 // ExportCkData 后台 cookie 库导出：返回 用户名----密码----cookie 行列表，并把导出的记录标记为已导出。
@@ -92,11 +95,17 @@ func (h *Handler) ExportCkData(c *gin.Context) {
 		// 勾选导出：按勾选 id 导出，不区分是否已导出
 		query = query.Where("id IN ?", req.IDs)
 	} else {
-		// 按数量导出：只取最早的未导出记录
+		// 筛选导出：按来源/状态筛选 + 数量
 		if req.Count > 1000 {
 			req.Count = 1000 // 上限保护
 		}
-		query = query.Where("exported = ?", false).Order("id ASC").Limit(req.Count)
+		if req.SourceType != "" && req.SourceType != "all" && req.SourceValue != "" {
+			query = query.Where("source = ?", req.SourceValue)
+		}
+		if req.Exported != nil {
+			query = query.Where("exported = ?", *req.Exported)
+		}
+		query = query.Order("id ASC").Limit(req.Count)
 	}
 
 	var rows []model.CkData
@@ -121,6 +130,34 @@ func (h *Handler) ExportCkData(c *gin.Context) {
 	}
 
 	util.OK(c, gin.H{"count": len(rows), "lines": buildExportLines(rows)})
+}
+
+// ListCkDataOptions 筛选导出弹窗的用户下拉数据源（分页加载）：
+// 参数 type=open|user，查 ckdata 去重 source 前缀（开放平台:/用户:）；keyword 可选模糊过滤；page、page_size 分页。
+func (h *Handler) ListCkDataOptions(c *gin.Context) {
+	page, pageSize := parsePage(c)
+	typ := strings.TrimSpace(c.Query("type"))
+	keyword := strings.TrimSpace(c.Query("keyword"))
+
+	prefix := "用户:"
+	if typ == "open" {
+		prefix = "开放平台:"
+	}
+
+	query := database.DB.Model(&model.CkData{}).
+		Select("DISTINCT source").
+		Where("source LIKE ?", prefix+"%")
+	if keyword != "" {
+		query = query.Where("source LIKE ?", "%"+keyword+"%")
+	}
+
+	var sources []string
+	if err := query.Order("source ASC").
+		Offset((page - 1) * pageSize).Limit(pageSize).Scan(&sources).Error; err != nil {
+		util.Fail(c, util.CodeDBError, "查询失败")
+		return
+	}
+	util.OK(c, gin.H{"list": sources, "has_more": len(sources) == pageSize})
 }
 
 // buildExportLines 把 ckdata 行拼成 用户名----密码----cookie 列表。

@@ -52,3 +52,25 @@ func TestRandomCredential(t *testing.T) {
 		}
 	}
 }
+
+// TestApplyCost 扣费逻辑：余额足够返回扣后余额；不足返回 ok=false。
+func TestApplyCost(t *testing.T) {
+	cases := []struct {
+		balance, cost int
+		wantBalance   int
+		wantOK        bool
+	}{
+		{balance: 5, cost: 1, wantBalance: 4, wantOK: true},   // 足够
+		{balance: 1, cost: 1, wantBalance: 0, wantOK: true},   // 正好
+		{balance: 0, cost: 1, wantBalance: 0, wantOK: false},  // 不足
+		{balance: 5, cost: 0, wantBalance: 5, wantOK: true},   // 单价 0 不扣
+		{balance: 2, cost: 3, wantBalance: 0, wantOK: false},  // 不足
+	}
+	for _, c := range cases {
+		got, ok := applyCost(c.balance, c.cost)
+		if ok != c.wantOK || got != c.wantBalance {
+			t.Errorf("applyCost(%d,%d) = (%d,%v), want (%d,%v)",
+				c.balance, c.cost, got, ok, c.wantBalance, c.wantOK)
+		}
+	}
+}

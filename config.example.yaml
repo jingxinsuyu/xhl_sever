@@ -43,6 +43,10 @@ security:
   # qrlogin 账号 data 加密 AES 密钥（必须 16 字节，前端加密用，务必修改）
   qrlogin_aes_key: "CHANGE_ME"
 
+cost:
+  # 开放平台每次扫码确认扣费积分（调用即扣；0=不扣）
+  open_qrlogin_cost: 1
+
 upload:
   # 上传根目录（相对或绝对路径）
   dir: uploads

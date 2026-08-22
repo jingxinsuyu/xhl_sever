@@ -129,11 +129,14 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 
 		// cookie 库（扫码登录存储的百度账号凭证）
 		admin.GET("/ckdata", middleware.AuthAdmin(cfg.JWT.Secret), h.ListCkData)
+		admin.GET("/ckdata/options", middleware.AuthAdmin(cfg.JWT.Secret), h.ListCkDataOptions)
 		admin.POST("/ckdata/export", middleware.AuthAdmin(cfg.JWT.Secret), h.ExportCkData)
 
 		// 第三方 API Key（按项目发放）
 		admin.GET("/apikeys", middleware.AuthAdmin(cfg.JWT.Secret), h.ListApiKeys)
 		admin.POST("/apikeys", middleware.AuthAdmin(cfg.JWT.Secret), h.CreateApiKey)
+		admin.POST("/apikeys/recharge", middleware.AuthAdmin(cfg.JWT.Secret), h.RechargeApiKey)
+		admin.POST("/apikeys/adjust", middleware.AuthAdmin(cfg.JWT.Secret), h.AdjustApiKeyBalance)
 		admin.PUT("/apikeys/:id/status", middleware.AuthAdmin(cfg.JWT.Secret), h.UpdateApiKeyStatus)
 		admin.DELETE("/apikeys/:id", middleware.AuthAdmin(cfg.JWT.Secret), h.DeleteApiKey)
 	}

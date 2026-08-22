@@ -11,6 +11,7 @@ type ApiKey struct {
 	Key       string    `gorm:"size:64;not null;uniqueIndex" json:"key"` // sk-xxx
 	Remark    string    `gorm:"size:255;not null;default:''" json:"remark"`
 	Status    int8      `gorm:"not null;default:1" json:"status"` // 1 启用 / 0 禁用
+	Balance   int       `gorm:"not null;default:0" json:"balance"` // 积分余额（开放平台扫码扣费）
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
