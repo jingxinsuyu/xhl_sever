@@ -299,14 +299,15 @@ func (h *Handler) UserLogin(c *gin.Context) {
 		return
 	}
 
-	// 机器码绑定：首次自动绑定；已有其他设备绑定则拒绝，需先解绑
-	bound, err := h.checkOrBindMachine(&user, req.ProjectID, req.MachineCode)
+	// IP 绑定：取 TCP 连接真实 IP（c.ClientIP，客户端无法伪造），首次绑定，其他 IP 拒绝需解绑。
+	// 请求里的 machine_code 字段保留接收但不再参与校验（误导机器）。
+	bound, err := h.checkOrBindIP(&user, req.ProjectID, c.ClientIP())
 	if err != nil {
 		util.Fail(c, util.CodeDBError, "系统错误")
 		return
 	}
 	if !bound {
-		util.Fail(c, util.CodeDeviceNotBound, "该账号已被别的机器绑定，请先解绑后重试")
+		util.Fail(c, util.CodeDeviceNotBound, "该账号已在其他网络绑定，请先解绑后重试")
 		return
 	}
 
@@ -343,18 +344,19 @@ func (h *Handler) UserLogin(c *gin.Context) {
 	})
 }
 
-// checkOrBindMachine 校验并绑定机器码。
-// 返回 bound=false 表示该用户在此项目已绑定其他设备，需先解绑。
-func (h *Handler) checkOrBindMachine(user *model.User, projectID string, machineCode string) (bool, error) {
+// checkOrBindIP 校验并绑定请求来源 IP（machine_code 列复用存 IP）。
+// 返回 bound=false 表示该用户在此项目已绑定其他 IP，需先解绑。
+func (h *Handler) checkOrBindIP(user *model.User, projectID string, ip string) (bool, error) {
+	ip = strings.TrimSpace(ip)
 	var b model.UserBinding
-	err := database.DB.Where("user_id = ? AND project_id = ? AND machine_code = ?", user.ID, projectID, machineCode).First(&b).Error
+	err := database.DB.Where("user_id = ? AND project_id = ? AND machine_code = ?", user.ID, projectID, ip).First(&b).Error
 	if err == nil {
-		return true, nil // 本设备已绑定
+		return true, nil // 本 IP 已绑定
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, err
 	}
-	// 本设备未绑定：若该项目下已有其他设备绑定 → 拒绝
+	// 本 IP 未绑定：若该项目下已有其他 IP 绑定 → 拒绝
 	var count int64
 	if err := database.DB.Model(&model.UserBinding{}).
 		Where("user_id = ? AND project_id = ?", user.ID, projectID).Count(&count).Error; err != nil {
@@ -363,11 +365,11 @@ func (h *Handler) checkOrBindMachine(user *model.User, projectID string, machine
 	if count > 0 {
 		return false, nil
 	}
-	// 首次绑定该设备
+	// 首次绑定该 IP
 	if err := database.DB.Create(&model.UserBinding{
 		UserID:      user.ID,
 		ProjectID:   projectID,
-		MachineCode: machineCode,
+		MachineCode: ip,
 	}).Error; err != nil {
 		return false, err
 	}
