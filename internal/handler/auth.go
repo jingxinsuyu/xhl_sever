@@ -307,7 +307,7 @@ func (h *Handler) UserLogin(c *gin.Context) {
 		return
 	}
 	if !bound {
-		util.Fail(c, util.CodeDeviceNotBound, "该账号已在其他网络绑定，请先解绑后重试")
+		util.Fail(c, util.CodeDeviceNotBound, "该账号已在其他设备登录，请先解绑后重试")
 		return
 	}
 
