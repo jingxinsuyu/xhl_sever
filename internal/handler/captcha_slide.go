@@ -22,8 +22,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// captchaSlideTTL 验证码答案 / 通过凭证的有效期
+// captchaSlideTTL 验证码答案的有效期
 const captchaSlideTTL = 60 * time.Second
+
+// captchaPassTTL 验证码通过凭证（步进区间）的有效期：覆盖整天，避免区间内重复触发
+const captchaPassTTL = 24 * time.Hour
 
 // slideCaptchaStep 返回指定接口每日调用每多少次触发一次滑动验证码（config.security.captcha_step[api]，缺省/≤0 不触发）
 func (h *Handler) slideCaptchaStep(api string) int {
@@ -166,10 +169,22 @@ func (h *Handler) VerifySlideCaptcha(c *gin.Context) {
 		return
 	}
 
-	// 5. 通过：删答案，写用户通过凭证（一次性，TTL 60s）
+	// 5. 通过：删答案，写用户通过凭证（记录当前步进区间号，覆盖整天）
 	h.Redis.Del(context.Background(), captchaSlideKey(req.CaptchaID))
-	h.Redis.Set(context.Background(), captchaPassKey(claims.UserID), "1", captchaSlideTTL)
+	interval := h.currentCaptchaInterval(claims.UserID)
+	h.Redis.Set(context.Background(), captchaPassKey(claims.UserID),
+		strconv.FormatInt(interval, 10), captchaPassTTL)
 	util.OK(c, gin.H{"ok": true})
+}
+
+// currentCaptchaInterval 用户当前所在步进区间号 = dailyCount/step（用于记录已通过到哪一区间）
+func (h *Handler) currentCaptchaInterval(userID uint64) int64 {
+	count := h.todayCallCount(qrLoginProjectID, userID, "qrlogin")
+	step := h.slideCaptchaStep("qrlogin")
+	if step <= 0 {
+		return 0
+	}
+	return count / int64(step)
 }
 
 // validateTrace 轨迹校验：点数/时长/无瞬移/终点对齐/末尾减速。
@@ -231,17 +246,17 @@ func (h *Handler) captchaRequired(api string, userID uint64, dailyCount int64) b
 	if step <= 0 {
 		return false
 	}
-	if dailyCount%int64(step) != 0 {
+	// 未达到触发步进点 → 放行
+	if dailyCount < int64(step) {
 		return false
 	}
-	// 有通过凭证则放行
-	ok, _ := h.Redis.Exists(context.Background(), captchaPassKey(userID)).Result()
-	return ok == 0
-}
-
-// consumeCaptchaPass 消费用户验证码通过凭证（一次性，用于扫码放行后清除）。
-func (h *Handler) consumeCaptchaPass(userID uint64) {
-	h.Redis.Del(context.Background(), captchaPassKey(userID))
+	// 当前区间号 = dailyCount/step；已通过区间 >= 当前区间 → 放行（本区间验证过）
+	cur := dailyCount / int64(step)
+	v, err := h.Redis.Get(context.Background(), captchaPassKey(userID)).Int64()
+	if err == nil && v >= cur {
+		return false
+	}
+	return true
 }
 
 // randHex 生成 n 字节的随机十六进制字符串

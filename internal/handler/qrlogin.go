@@ -58,12 +58,11 @@ func (h *Handler) QrLogin(c *gin.Context) {
 		util.Fail(c, util.CodeCallLimitExceed, "已达到每日使用上限")
 		return
 	}
-	// 按配置步进触发一次滑动拼图验证码（有通过凭证则放行）
+	// 按配置步进触发滑动拼图验证码：达到步进点后须验证通过（区间凭证，本区间内放行）
 	if h.captchaRequired("qrlogin", claims.UserID, dailyCount) {
 		util.Fail(c, util.CodeCaptchaRequired, "请先完成拼图验证")
 		return
 	}
-	h.consumeCaptchaPass(claims.UserID)
 
 	// 开启 SSE 流
 	c.Header("Content-Type", "text/event-stream")
