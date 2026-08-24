@@ -161,9 +161,10 @@ func buildParams(sign, lp string, cookies map[string]string, dev *device.Device)
 		"sign":        sign,
 		"cmd":         "login",
 		"bduss":       cookies["BDUSS"],
-		// 纯 BDUSS 扫码：stoken/ptoken 传空值（签名算法连空值一起算，服务器验签才匹配）
-		"stoken": "",
-		"ptoken": "",
+		// stoken/ptoken：cookie 里有就带真实值，没有则空值（纯 BDUSS 也能扫；
+		// 签名算法连空值一起算，服务器验签才匹配，否则 errno:-2）
+		"stoken": cookies["STOKEN"],
+		"ptoken": cookies["PTOKEN"],
 	}
 }
 

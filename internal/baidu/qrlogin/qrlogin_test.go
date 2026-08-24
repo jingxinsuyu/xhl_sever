@@ -107,15 +107,12 @@ func TestConfirm(t *testing.T) {
 	if gotForm.Get("sign") != "abc123" || gotForm.Get("bduss") != "bduss123" {
 		t.Fatalf("业务参数错误: %v", gotForm)
 	}
-	// 纯 BDUSS：stoken/ptoken 字段存在但值为空（签名跳过空值，服务器验签字段齐全）
-	if _, ok := gotForm["stoken"]; !ok {
-		t.Fatalf("stoken 字段应存在（空值）: %v", gotForm)
+	// cookie 有真实 STOKEN/PTOKEN → 请求带真实值；没有则空值（纯 BDUSS 也能扫）
+	if gotForm.Get("stoken") != "stok456" {
+		t.Fatalf("stoken 应传真实值 stok456: %v", gotForm)
 	}
-	if _, ok := gotForm["ptoken"]; !ok {
-		t.Fatalf("ptoken 字段应存在（空值）: %v", gotForm)
-	}
-	if gotForm.Get("stoken") != "" || gotForm.Get("ptoken") != "" {
-		t.Fatalf("stoken/ptoken 应为空值: %v", gotForm)
+	if gotForm.Get("ptoken") != "ptok789" {
+		t.Fatalf("ptoken 应传真实值 ptok789: %v", gotForm)
 	}
 	// sig 自校验：对收到的参数（排除 sig 本身）重算应一致
 	recalc := make(map[string]string)
@@ -148,6 +145,43 @@ func TestConfirmFailure(t *testing.T) {
 	}
 	if res.Errno != "400031" {
 		t.Fatalf("errno = %q", res.Errno)
+	}
+}
+
+// TestConfirmNoToken cookie 只有 BDUSS（无 STOKEN/PTOKEN）→ stoken/ptoken 传空值（纯 BDUSS 扫码）。
+func TestConfirmNoToken(t *testing.T) {
+	var gotForm url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		gotForm = r.PostForm
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"errno":0,"code":"0","message":"ok"}`))
+	}))
+	defer server.Close()
+	sapiURL = server.URL + "/v2/sapi/qrlogin?lp="
+
+	cookie := "BDUSS=bduss123" // 只有 BDUSS
+	res, err := Confirm("https://wappass.baidu.com/wp/?qrlogin&sign=abc123&lp=pc", cookie, "")
+	if err != nil {
+		t.Fatalf("Confirm error: %v", err)
+	}
+	if !res.OK {
+		t.Fatalf("纯 BDUSS 应成功: %+v", res)
+	}
+	// 无 STOKEN/PTOKEN → 字段存在但为空
+	if gotForm.Get("stoken") != "" || gotForm.Get("ptoken") != "" {
+		t.Fatalf("无 token 时 stoken/ptoken 应为空: %v", gotForm)
+	}
+	// sig 自校验（空值参与签名）
+	recalc := make(map[string]string)
+	for k := range gotForm {
+		if k == "sig" {
+			continue
+		}
+		recalc[k] = gotForm.Get(k)
+	}
+	if gotForm.Get("sig") != calculateSig(recalc, appSignKey) {
+		t.Fatalf("sig 与算法不一致")
 	}
 }
 
