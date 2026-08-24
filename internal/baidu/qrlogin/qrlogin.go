@@ -150,8 +150,9 @@ func buildParams(sign, lp string, cookies map[string]string, dev *device.Device)
 		"sign":        sign,
 		"cmd":         "login",
 		"bduss":       cookies["BDUSS"],
-		"stoken":      cookies["STOKEN"],
-		"ptoken":      cookies["PTOKEN"],
+		// TODO 实验：去掉 stoken/ptoken，只靠 BDUSS 扫码；不行再改回来
+		// "stoken":      cookies["STOKEN"],
+		// "ptoken":      cookies["PTOKEN"],
 	}
 }
 

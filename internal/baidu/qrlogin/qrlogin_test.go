@@ -97,14 +97,18 @@ func TestConfirm(t *testing.T) {
 	if !strings.Contains(gotUA, "Android") || !strings.Contains(gotUA, "tieba/") {
 		t.Fatalf("UA 不是手机设备指纹: %q", gotUA)
 	}
-	// 公共参数
-	for _, k := range []string{"client", "cuid", "clientid", "clientfrom", "zid", "appid", "tpl", "app_version", "sdk_version", "sdkversion", "sign", "cmd", "bduss", "stoken", "ptoken", "sig"} {
+	// 公共参数（实验：去掉了 stoken/ptoken，只靠 BDUSS）
+	for _, k := range []string{"client", "cuid", "clientid", "clientfrom", "zid", "appid", "tpl", "app_version", "sdk_version", "sdkversion", "sign", "cmd", "bduss", "sig"} {
 		if gotForm.Get(k) == "" {
 			t.Fatalf("缺少参数 %s", k)
 		}
 	}
-	if gotForm.Get("sign") != "abc123" || gotForm.Get("bduss") != "bduss123" || gotForm.Get("stoken") != "stok456" || gotForm.Get("ptoken") != "ptok789" {
+	if gotForm.Get("sign") != "abc123" || gotForm.Get("bduss") != "bduss123" {
 		t.Fatalf("业务参数错误: %v", gotForm)
+	}
+	// 实验期：stoken/ptoken 不应发送
+	if gotForm.Get("stoken") != "" || gotForm.Get("ptoken") != "" {
+		t.Fatalf("实验期不应发送 stoken/ptoken: %v", gotForm)
 	}
 	// sig 自校验：对收到的参数（排除 sig 本身）重算应一致
 	recalc := make(map[string]string)
