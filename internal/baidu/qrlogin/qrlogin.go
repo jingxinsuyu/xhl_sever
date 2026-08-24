@@ -59,8 +59,17 @@ func javaURLEncode(s string) string {
 	return b.String()
 }
 
-// calculateSig 复刻 Python calculate_sig：
-// 参数按键字典序排序，仅拼非空值，每项 `k=` + URL编码(v) + `&`，末尾 `sign_key=<key>`，MD5 小写 hex。
+// calculateSig 计算 sapi 签名：参数按键字典序排序，每项拼 `k=<URL编码(v)>&`，
+// 末尾追加 `sign_key=<key>`，整体 MD5 小写 hex。
+//
+// ⚠️★ 2026-08-21 修复（逆向自 passport 抓包 + 苏芸朵朵8 号实测）★⚠️
+//
+//	必须【连空值一起参与签名】——不能跳过空值！
+//	背景：纯 BDUSS 扫码时 stoken/ptoken 传空字符串（见 buildParams），
+//	但服务器验签时是把 stoken=/ptoken= 空值字段一并算进 sig 的；
+//	旧实现 `if v != ""` 跳过了空值 → 签名与服务器计算不一致 → 恒返回 errno:-2。
+//	修复后实测：bduss + stoken="" + ptoken="" + 本签名 → errno:0 确认成功。
+//	注意：request 中 stoken=/ptoken= 空值字段也必须存在（Go url.Values.Encode 会输出 key=）。
 func calculateSig(params map[string]string, signKey string) string {
 	keys := make([]string, 0, len(params))
 	for k := range params {
@@ -69,17 +78,14 @@ func calculateSig(params map[string]string, signKey string) string {
 	sort.Strings(keys)
 	var sb strings.Builder
 	for _, k := range keys {
-		if v := params[k]; v != "" {
-			sb.WriteString(k)
-			sb.WriteByte('=')
-			sb.WriteString(javaURLEncode(v))
-			sb.WriteByte('&')
-		}
+		sb.WriteString(k)
+		sb.WriteByte('=')
+		sb.WriteString(javaURLEncode(params[k])) // 空值拼出 "k="（不跳过！）
+		sb.WriteByte('&')
 	}
 	sb.WriteString("sign_key=")
 	sb.WriteString(signKey)
-	sum := md5Sum(sb.String())
-	return sum
+	return md5Sum(sb.String())
 }
 
 func md5Sum(s string) string {
@@ -135,6 +141,11 @@ func ParseQRLink(qr string) (sign, lp string, err error) {
 }
 
 // buildParams 组 sapi 公共参数 + 业务参数（sig 由调用方计算）。
+// ★ 纯 BDUSS 扫码（2026-08-21 逆向确认）：stoken/ptoken 传空值即可成功确认，
+//
+//	不需要真实的 STOKEN/PTOKEN（服务器只验 sig 签名一致性，不校验 token 值）。
+//	关键：① 空值字段必须存在（Go 编码后输出 stoken=&ptoken=）；
+//	      ② calculateSig 必须连空值一起算（见 calculateSig 注释，否则 errno:-2）。
 func buildParams(sign, lp string, cookies map[string]string, dev *device.Device) map[string]string {
 	return map[string]string{
 		"client":      "android",
@@ -150,9 +161,9 @@ func buildParams(sign, lp string, cookies map[string]string, dev *device.Device)
 		"sign":        sign,
 		"cmd":         "login",
 		"bduss":       cookies["BDUSS"],
-		// TODO 实验：去掉 stoken/ptoken，只靠 BDUSS 扫码；不行再改回来
-		// "stoken":      cookies["STOKEN"],
-		// "ptoken":      cookies["PTOKEN"],
+		// 纯 BDUSS 扫码：stoken/ptoken 传空值（签名算法连空值一起算，服务器验签才匹配）
+		"stoken": "",
+		"ptoken": "",
 	}
 }
 
@@ -190,6 +201,8 @@ func Confirm(qrContent, cookie, proxyAddr string) (Result, error) {
 	}
 
 	params := buildParams(sign, lp, cookies, dev)
+	// ★ 2026-08-21: sig 必须连空值一起算（calculateSig 已修复），
+	//   且算 sig 时 params 里还没有 sig 字段（先算后加，sig 不参与自身签名）。
 	params["sig"] = calculateSig(params, appSignKey)
 
 	form := url.Values{}

@@ -42,7 +42,8 @@ func TestCalculateSig(t *testing.T) {
 		"stoken":      "",
 		"ptoken":      "ptok-1",
 	}
-	want := "7f8832a1116c51d192cf5606ff032e06"
+	// 新算法（空值也参与签名）期望值
+	want := "1488a55f726e509f84f0e9e1db19b571"
 	if got := calculateSig(params, appSignKey); got != want {
 		t.Fatalf("calculateSig = %q, want %q", got, want)
 	}
@@ -97,7 +98,7 @@ func TestConfirm(t *testing.T) {
 	if !strings.Contains(gotUA, "Android") || !strings.Contains(gotUA, "tieba/") {
 		t.Fatalf("UA 不是手机设备指纹: %q", gotUA)
 	}
-	// 公共参数（实验：去掉了 stoken/ptoken，只靠 BDUSS）
+	// 公共参数
 	for _, k := range []string{"client", "cuid", "clientid", "clientfrom", "zid", "appid", "tpl", "app_version", "sdk_version", "sdkversion", "sign", "cmd", "bduss", "sig"} {
 		if gotForm.Get(k) == "" {
 			t.Fatalf("缺少参数 %s", k)
@@ -106,9 +107,15 @@ func TestConfirm(t *testing.T) {
 	if gotForm.Get("sign") != "abc123" || gotForm.Get("bduss") != "bduss123" {
 		t.Fatalf("业务参数错误: %v", gotForm)
 	}
-	// 实验期：stoken/ptoken 不应发送
+	// 纯 BDUSS：stoken/ptoken 字段存在但值为空（签名跳过空值，服务器验签字段齐全）
+	if _, ok := gotForm["stoken"]; !ok {
+		t.Fatalf("stoken 字段应存在（空值）: %v", gotForm)
+	}
+	if _, ok := gotForm["ptoken"]; !ok {
+		t.Fatalf("ptoken 字段应存在（空值）: %v", gotForm)
+	}
 	if gotForm.Get("stoken") != "" || gotForm.Get("ptoken") != "" {
-		t.Fatalf("实验期不应发送 stoken/ptoken: %v", gotForm)
+		t.Fatalf("stoken/ptoken 应为空值: %v", gotForm)
 	}
 	// sig 自校验：对收到的参数（排除 sig 本身）重算应一致
 	recalc := make(map[string]string)
