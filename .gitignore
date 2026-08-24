@@ -14,6 +14,8 @@ xhl_sever-linux
 uploads/
 # 迁移快照备份
 project_id_migration_backup_*.json
+# 滑动拼图验证码素材（背景图，部署时上传挂载）
+captcha_assets/
 
 # ===== 需求/提示词文档（不入库）=====
 /*.md
@@ -21,6 +23,7 @@ project_id_migration_backup_*.json
 !DEPLOY.md
 !API.md
 !OPEN_API.md
+!SLIDE_CAPTCHA.md
 
 # ===== 本地/工具设置 =====
 .claude/settings.local.json

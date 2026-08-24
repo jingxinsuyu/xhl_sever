@@ -51,6 +51,10 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 	// 百度扫码确认（需登录 + 100001 项目会员，SSE 流式）
 	r.POST("/api/xhl/qrlogin", middleware.AuthUser(cfg.JWT.Secret), h.QrLogin)
 
+	// 滑动拼图验证码（需登录；扫码每 25 次触发一次）
+	r.POST("/api/xhl/captcha", middleware.AuthUser(cfg.JWT.Secret), h.GenSlideCaptcha)
+	r.POST("/api/xhl/captcha/verify", middleware.AuthUser(cfg.JWT.Secret), h.VerifySlideCaptcha)
+
 	// 第三方开放接口（API Key 鉴权，xhlkey 请求头；明文 JSON，按 key 所属项目）
 	r.POST("/api/open/qrlogin", middleware.AuthApiKey(), h.OpenQrLogin)
 

@@ -52,14 +52,18 @@ func (h *Handler) QrLogin(c *gin.Context) {
 		return
 	}
 
-	// 每日调用次数限制（按接口计数）：CallLimit > 0 时计数并超限拦截（0 = 不限制）
-	if project.CallLimit > 0 {
-		count := h.recordDailyCall(qrLoginProjectID, claims.UserID, "qrlogin")
-		if count > int64(project.CallLimit) {
-			util.Fail(c, util.CodeCallLimitExceed, "已达到每日使用上限")
-			return
-		}
+	// 每日调用计数（按接口），用于：CallLimit 超限拦截 + 每 25 次触发滑动验证码
+	dailyCount := h.recordDailyCall(qrLoginProjectID, claims.UserID, "qrlogin")
+	if project.CallLimit > 0 && dailyCount > int64(project.CallLimit) {
+		util.Fail(c, util.CodeCallLimitExceed, "已达到每日使用上限")
+		return
 	}
+	// 按配置步进触发一次滑动拼图验证码（有通过凭证则放行）
+	if h.captchaRequired("qrlogin", claims.UserID, dailyCount) {
+		util.Fail(c, util.CodeCaptchaRequired, "请先完成拼图验证")
+		return
+	}
+	h.consumeCaptchaPass(claims.UserID)
 
 	// 开启 SSE 流
 	c.Header("Content-Type", "text/event-stream")

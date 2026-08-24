@@ -54,8 +54,9 @@ type Security struct {
 	LoginRateLimitPerMin int    `yaml:"login_rate_limit_per_min"` // 每账号每分钟允许登录次数
 	CaptchaExpireSeconds int    `yaml:"captcha_expire_seconds"`   // 图形验证码有效期（秒）
 	ClientSignSalt       string `yaml:"client_sign_salt"`         // 客户端登录参数签名盐
-	ClientAESKey         string `yaml:"client_aes_key"`           // 客户端登录密码 AES 密钥（16 字节）
-	QrLoginAESKey        string `yaml:"qrlogin_aes_key"`          // qrlogin data 加密 AES 密钥（16 字节）
+	ClientAESKey         string           `yaml:"client_aes_key"`   // 客户端登录密码 AES 密钥（16 字节）
+	QrLoginAESKey        string           `yaml:"qrlogin_aes_key"`  // qrlogin data 加密 AES 密钥（16 字节）
+	CaptchaStep          map[string]int   `yaml:"captcha_step"`     // 各接口每日调用每 N 次触发一次滑动验证码（key=接口名，0=不触发）
 }
 
 // Upload 文件上传配置
@@ -132,3 +133,4 @@ func (c *Config) StaticDir() string {
 	}
 	return dir
 }
+

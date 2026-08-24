@@ -29,6 +29,7 @@ const (
 	CodeMembershipExpired = 1018 // 会员已过期
 	CodeCallLimitExceed   = 1019 // 今日调用次数已达上限
 	CodeInsufficientBalance = 1020 // 积分不足
+	CodeCaptchaRequired     = 1021 // 需要先通过滑动拼图验证码
 )
 
 // Response 统一响应结构
