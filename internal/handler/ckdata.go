@@ -95,9 +95,9 @@ func (h *Handler) ExportCkData(c *gin.Context) {
 		// 勾选导出：按勾选 id 导出，不区分是否已导出
 		query = query.Where("id IN ?", req.IDs)
 	} else {
-		// 筛选导出：按来源/状态筛选 + 数量
-		if req.Count > 1000 {
-			req.Count = 1000 // 上限保护
+		// 筛选导出：按来源/状态筛选 + 数量（最新到旧）
+		if req.Count > 1000000 {
+			req.Count = 1000000 // 上限保护（100W）
 		}
 		if req.SourceType != "" && req.SourceType != "all" && req.SourceValue != "" {
 			query = query.Where("source = ?", req.SourceValue)
@@ -105,7 +105,7 @@ func (h *Handler) ExportCkData(c *gin.Context) {
 		if req.Exported != nil {
 			query = query.Where("exported = ?", *req.Exported)
 		}
-		query = query.Order("id ASC").Limit(req.Count)
+		query = query.Order("id DESC").Limit(req.Count)
 	}
 
 	var rows []model.CkData
