@@ -12,7 +12,7 @@
 联系平台管理员创建 API Key（也可在管理后台自行创建）。key 格式为 `sk-` 前缀 + 32 位十六进制字符，例如：
 
 ```
-sk-56f50dc7d387f7a1352a06a42758128f
+sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 ### 1.2 鉴权方式
@@ -152,7 +152,7 @@ GET /api/open/balance?key=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
   "code": 0,
   "message": "ok",
   "data": {
-    "key": "sk-56f50dc7d387f7a1352a06a42758128f",
+    "key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
     "balance": 9985
   }
 }
@@ -176,7 +176,7 @@ GET /api/open/balance?key=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ```bash
 curl -X POST http://103.36.223.143:8888/api/open/qrlogin \
-  -H "xhlkey: sk-56f50dc7d387f7a1352a06a42758128f" \
+  -H "xhlkey: sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
   -H "Content-Type: application/json" \
   -d '{"qrUrl":"https://wappass.baidu.com/wp/?qrlogin&sign=xxxx&lp=pc","ck":"BDUSS=xxx; STOKEN=xxx"}'
 ```
@@ -187,7 +187,7 @@ curl -X POST http://103.36.223.143:8888/api/open/qrlogin \
 import requests
 
 url = "http://103.36.223.143:8888/api/open/qrlogin"
-headers = {"xhlkey": "sk-56f50dc7d387f7a1352a06a42758128f"}
+headers = {"xhlkey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
 data = {
     "qrUrl": "https://wappass.baidu.com/wp/?qrlogin&sign=xxxx&lp=pc",
     "ck": "BDUSS=xxx; STOKEN=xxx",
@@ -202,13 +202,13 @@ else:
 ### 查询余额
 
 ```bash
-curl "http://103.36.223.143:8888/api/open/balance?key=sk-56f50dc7d387f7a1352a06a42758128f"
+curl "http://103.36.223.143:8888/api/open/balance?key=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ```
 
 ```python
 import requests
 
-key = "sk-56f50dc7d387f7a1352a06a42758128f"
+key = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 resp = requests.get(f"http://103.36.223.143:8888/api/open/balance?key={key}", timeout=30).json()
 if resp["code"] == 0:
     print(f"剩余积分: {resp['data']['balance']}")

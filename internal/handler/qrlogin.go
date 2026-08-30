@@ -23,6 +23,7 @@ const qrLoginProjectID = "100001"
 type QrLoginRequest struct {
 	LoginURL string `json:"loginUrl" binding:"required"` // 前端识别二维码中的链接（含 sign）
 	Data     string `json:"data" binding:"required"`     // AES 加密后 base64 的 用户名----密码----cookie
+	DeviceID string `json:"device_id"`                   // MD5(设备码)，防 token 复制到其他设备
 }
 
 // QrLogin 百度扫码确认（SSE 流式）。
@@ -49,6 +50,19 @@ func (h *Handler) QrLogin(c *gin.Context) {
 	ent := getEntitlement(claims.UserID, qrLoginProjectID)
 	if ent == nil || !ent.IsValid(timeNow()) {
 		util.Fail(c, util.CodeNoPermission, "无该项目权限")
+		return
+	}
+
+	// device_id 绑定比对：请求的 device_id 必须等于 MD5(绑定设备码)，防 token 复制到其他设备
+	var binding model.UserBinding
+	if err := database.DB.
+		Where("user_id = ? AND project_id = ?", claims.UserID, qrLoginProjectID).
+		First(&binding).Error; err != nil {
+		util.Fail(c, util.CodeDeviceNotBound, "该账号尚未绑定设备，请重新登录")
+		return
+	}
+	if req.DeviceID == "" || util.Md5Hex(binding.MachineCode) != req.DeviceID {
+		util.Fail(c, util.CodeDeviceNotBound, "该账号已在其他设备登录，请先解绑后重试")
 		return
 	}
 

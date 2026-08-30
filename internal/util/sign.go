@@ -39,3 +39,8 @@ func VerifyClientSign(params map[string]string, salt, sign string) bool {
 	sum := md5.Sum([]byte(SignParams(params, salt)))
 	return strings.EqualFold(fmt.Sprintf("%x", sum), strings.TrimSpace(sign))
 }
+
+// Md5Hex 返回字符串的 32 位小写 MD5 十六进制（如 device_id 生成）。
+func Md5Hex(s string) string {
+	return fmt.Sprintf("%x", md5.Sum([]byte(s)))
+}

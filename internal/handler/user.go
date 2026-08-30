@@ -170,7 +170,8 @@ func (h *Handler) UpdateUserStatus(c *gin.Context) {
 
 // UserBindingInfo 用户在某项目的绑定信息
 type UserBindingInfo struct {
-	MachineCode string `json:"machine_code"`
+	MachineCode string `json:"machine_code"` // 设备码
+	IP          string `json:"ip"`           // 最近登录 IP（仅记录）
 	BoundAt     string `json:"bound_at"`
 }
 
@@ -242,6 +243,7 @@ func (h *Handler) GetUserMembership(c *gin.Context) {
 		for _, b := range bindingMap[p.ID] {
 			item.Bindings = append(item.Bindings, UserBindingInfo{
 				MachineCode: b.MachineCode,
+				IP:          b.IP,
 				BoundAt:     b.CreatedAt.Format("2006-01-02 15:04:05"),
 			})
 		}

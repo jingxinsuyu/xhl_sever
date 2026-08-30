@@ -299,9 +299,8 @@ func (h *Handler) UserLogin(c *gin.Context) {
 		return
 	}
 
-	// IP 绑定：取 TCP 连接真实 IP（c.ClientIP，客户端无法伪造），首次绑定，其他 IP 拒绝需解绑。
-	// 请求里的 machine_code 字段保留接收但不再参与校验（误导机器）。
-	bound, err := h.checkOrBindIP(&user, req.ProjectID, c.ClientIP())
+	// 设备码绑定：按 machine_code 绑定/校验（稳定设备码，防共用号）；IP 仅记录不拦截（手机换 IP 不影响）
+	bound, err := h.checkOrBindDevice(&user, req.ProjectID, req.MachineCode, c.ClientIP())
 	if err != nil {
 		util.Fail(c, util.CodeDBError, "系统错误")
 		return
@@ -344,19 +343,23 @@ func (h *Handler) UserLogin(c *gin.Context) {
 	})
 }
 
-// checkOrBindIP 校验并绑定请求来源 IP（machine_code 列复用存 IP）。
-// 返回 bound=false 表示该用户在此项目已绑定其他 IP，需先解绑。
-func (h *Handler) checkOrBindIP(user *model.User, projectID string, ip string) (bool, error) {
-	ip = strings.TrimSpace(ip)
+// checkOrBindDevice 校验并绑定设备码（machine_code），IP 仅记录不拦截。
+// 返回 bound=false 表示该用户在此项目已绑定其他设备码，需先解绑。
+func (h *Handler) checkOrBindDevice(user *model.User, projectID string, machineCode string, ip string) (bool, error) {
+	machineCode = strings.TrimSpace(machineCode)
 	var b model.UserBinding
-	err := database.DB.Where("user_id = ? AND project_id = ? AND machine_code = ?", user.ID, projectID, ip).First(&b).Error
+	err := database.DB.Where("user_id = ? AND project_id = ? AND machine_code = ?", user.ID, projectID, machineCode).First(&b).Error
 	if err == nil {
-		return true, nil // 本 IP 已绑定
+		// 本设备已绑定：更新最近 IP 记录（换 IP 不拒绝）
+		if b.IP != ip {
+			database.DB.Model(&b).Update("ip", ip)
+		}
+		return true, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, err
 	}
-	// 本 IP 未绑定：若该项目下已有其他 IP 绑定 → 拒绝
+	// 本设备未绑定：若该项目下已有其他设备码绑定 → 拒绝
 	var count int64
 	if err := database.DB.Model(&model.UserBinding{}).
 		Where("user_id = ? AND project_id = ?", user.ID, projectID).Count(&count).Error; err != nil {
@@ -365,11 +368,12 @@ func (h *Handler) checkOrBindIP(user *model.User, projectID string, ip string) (
 	if count > 0 {
 		return false, nil
 	}
-	// 首次绑定该 IP
+	// 首次绑定该设备码
 	if err := database.DB.Create(&model.UserBinding{
 		UserID:      user.ID,
 		ProjectID:   projectID,
-		MachineCode: ip,
+		MachineCode: machineCode,
+		IP:          ip,
 	}).Error; err != nil {
 		return false, err
 	}
