@@ -43,7 +43,7 @@ xhl_sever/
 | `redis` | `host/port/password/db` | Redis 连接信息 |
 | `jwt` | `secret` | JWT 签名密钥，**生产必须换随机值** |
 | `jwt` | `expire_hours` | 后台管理员 token 有效期（小时，默认 72） |
-| `jwt` | `user_expire_hours` | 用户端 token 有效期（小时，默认 8760=1 年） |
+| `jwt` | `user_expire_hours` | 用户端 token 有效期（小时，默认 720=30 天） |
 | `security` | `login_rate_limit_per_min` | 每账号每分钟登录次数上限（防撞库） |
 | `security` | `captcha_expire_seconds` | 图形验证码有效期（秒） |
 | `security` | `client_sign_salt` | 客户端登录参数签名盐，**与客户端一致，务必修改** |

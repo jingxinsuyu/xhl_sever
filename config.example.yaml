@@ -28,8 +28,8 @@ jwt:
   secret: "CHANGE_ME"
   # 后台管理员 token 过期时间（小时）
   expire_hours: 72
-  # 用户 token 过期时间（小时），8760 = 1 年
-  user_expire_hours: 8760
+  # 用户 token 过期时间（小时），720 = 30 天
+  user_expire_hours: 720
 
 security:
   # 每账号每分钟允许登录次数（防撞库）
