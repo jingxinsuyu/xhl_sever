@@ -321,7 +321,7 @@ func (h *Handler) OpenQrLogin(c *gin.Context) {
 		return
 	}
 
-	// 积分扣费（调用即扣，无论确认成败）：单价 = config.security.open_qrlogin_cost
+	// 积分扣费（调用即扣，无论确认成败，扫不了也扣）：单价 = config.security.open_qrlogin_cost
 	cost := h.openQrLoginCost()
 	if cost > 0 {
 		res := database.DB.Model(&model.ApiKey{}).
@@ -349,6 +349,12 @@ func (h *Handler) OpenQrLogin(c *gin.Context) {
 		}
 	}
 
+	// 扫码登录保护预检：传 ck 即检测，与确认走同一代理出口；开保护则拦截（已按调用即扣扣费）
+	// if qrlogin.DetectScanProtect(req.Ck, proxyAddr) {
+	// 	util.Fail(c, util.CodeScanProtect, qrlogin.ScanProtectBlockedMessage)
+	// 	return
+	// }
+
 	res, err := qrlogin.Confirm(req.QrURL, req.Ck, proxyAddr)
 	if err != nil {
 		util.Fail(c, util.CodeParamError, "登录失败："+err.Error())
@@ -359,6 +365,103 @@ func (h *Handler) OpenQrLogin(c *gin.Context) {
 		h.saveCkData(0, randomCredential(), randomCredential(), req.Ck, "开放平台:"+ak.Name)
 	}
 	util.OK(c, gin.H{"ok": res.OK, "errno": res.Errno, "code": res.Code, "message": res.Message, "balance": ak.Balance})
+}
+
+// OpenNetdiskRequest BDUSS → 网盘 cookie 请求（ck 与扫码开放接口一致：完整 cookie 串）。
+type OpenNetdiskRequest struct {
+	Ck string `json:"ck" binding:"required"` // 完整百度 cookie 串（须含 BDUSS，可选 PTOKEN）
+}
+
+// OpenNetdiskCookie 开放平台 BDUSS 转网盘 cookie（仅项目 100001 的 API 可调用）。
+// 传入方式与扫码开放接口一致：ck 传完整 cookie；调用即扣 1 积分（无论成败）；
+// 成功后取网盘 STOKEN 组装网盘 cookie，按扫码同样方式（saveCkData / 开放平台:key名）入库发放。
+func (h *Handler) OpenNetdiskCookie(c *gin.Context) {
+	ak := middleware.GetApiKey(c)
+	if ak == nil {
+		util.Fail(c, util.CodeUnauthorized, "xhlkey 无效")
+		return
+	}
+	if ak.ProjectID != qrLoginProjectID {
+		util.Fail(c, util.CodeForbidden, "仅项目 100001 的 API 可调用")
+		return
+	}
+	var req OpenNetdiskRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.Fail(c, util.CodeParamError, "参数错误：ck 不能为空")
+		return
+	}
+	req.Ck = strings.TrimSpace(req.Ck)
+	if req.Ck == "" {
+		util.Fail(c, util.CodeParamError, "参数错误：ck 不能为空")
+		return
+	}
+	// 从传入 cookie 串取 BDUSS / PTOKEN（与扫码确认解析同一套规则）
+	vals := qrlogin.CookieValues(req.Ck)
+	bduss := vals["BDUSS"]
+	ptoken := vals["PTOKEN"]
+	if bduss == "" {
+		util.Fail(c, util.CodeParamError, "ck 中缺少 BDUSS")
+		return
+	}
+
+	// 积分扣费（调用即扣，无论成败，与扫码一致）：单价 = config.cost.open_qrlogin_cost（当前 1）
+	cost := h.openQrLoginCost()
+	if cost > 0 {
+		res := database.DB.Model(&model.ApiKey{}).
+			Where("`key` = ? AND balance >= ?", ak.Key, cost).
+			Update("balance", gorm.Expr("balance - ?", cost))
+		if res.Error != nil {
+			util.Fail(c, util.CodeDBError, "扣费失败")
+			return
+		}
+		if res.RowsAffected == 0 {
+			util.Fail(c, util.CodeInsufficientBalance, "积分不足")
+			return
+		}
+		// 重新读取扣费后余额返回给调用方
+		database.DB.First(&ak, ak.ID)
+	}
+
+	// 代理池：未配置则不走代理
+	proxyAddr := ""
+	if h.proxyURL() != "" {
+		proxyAddr = h.fetchProxy()
+		if proxyAddr == "" {
+			util.Fail(c, util.CodeNoPermission, "加载网络环境失败1000")
+			return
+		}
+	}
+
+	sr, err := qrlogin.FetchStokens(bduss, ptoken, proxyAddr)
+	if err != nil {
+		util.Fail(c, util.CodeParamError, "获取失败："+err.Error())
+		return
+	}
+	if !sr.OK {
+		msg := sr.Errmsg
+		if msg == "" {
+			msg = "BDUSS 换取失败（可能已失效）"
+		}
+		util.Fail(c, util.CodeParamError, msg)
+		return
+	}
+	nd, ok := sr.Stokens["netdisk"]
+	if !ok || nd == "" {
+		util.Fail(c, util.CodeParamError, "未返回网盘 STOKEN，可能该 BDUSS 未开通网盘")
+		return
+	}
+
+	// 组装网盘 cookie（返回给调用方）：BDUSS + (可选 PTOKEN) + 网盘 STOKEN（BAIDUID 等不沿用）
+	netdiskCookie := "BDUSS=" + bduss
+	if ptoken != "" {
+		netdiskCookie += "; PTOKEN=" + ptoken
+	}
+	netdiskCookie += "; STOKEN=" + nd
+
+	// 与扫码同款入库发放：成功后存【调用方传入的原 ck】到 ckdata（user_id=0 第三方来源，来源=开放平台:key名）
+	h.saveCkData(0, randomCredential(), randomCredential(), req.Ck, "开放平台:"+ak.Name)
+
+	util.OK(c, gin.H{"ok": true, "cookie": netdiskCookie, "netdisk_stoken": nd, "balance": ak.Balance})
 }
 
 // OpenApiKeyBalance 查询开放平台 API Key 剩余积分。

@@ -94,14 +94,30 @@ func AuthUser(jwtSecret string) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		// 版本校验：登录会自增 token_version，旧 token 版本不匹配即失效
-		var user model.User
-		if err := database.DB.Select("id", "token_version", "status").First(&user, claims.UserID).Error; err != nil {
+		// 版本校验：登录会自增本项目 token_version，本项目旧 token 失效；
+		// 不同项目各自独立版本，互不影响（多项目同时登录不互踢）。
+		pid := claims.ProjectID
+		if pid == "" {
+			// 兼容旧客户端（token 无 pid）：按旧行为只校验用户存在，不按 binding 版本踢。
+			// 旧 token 采用全局 user.token_version 语义，无法与按项目版本对齐，
+			// 此处仅放行（登录后会签发带 pid 的新 token，进入新版本体系）。
+			var user model.User
+			if err := database.DB.Select("id", "status").First(&user, claims.UserID).Error; err != nil {
+				util.Fail(c, util.CodeUnauthorized, "token 无效")
+				c.Abort()
+				return
+			}
+			c.Set(ContextClaims, claims)
+			c.Next()
+			return
+		}
+		var binding model.UserBinding
+		if err := database.DB.Where("user_id = ? AND project_id = ?", claims.UserID, pid).First(&binding).Error; err != nil {
 			util.Fail(c, util.CodeUnauthorized, "token 无效")
 			c.Abort()
 			return
 		}
-		if user.TokenVersion != claims.Ver {
+		if binding.TokenVersion != claims.Ver {
 			util.Fail(c, util.CodeUnauthorized, "token 已失效，请重新登录")
 			c.Abort()
 			return

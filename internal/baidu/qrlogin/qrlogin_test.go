@@ -228,6 +228,98 @@ func TestParseSapiResp(t *testing.T) {
 	}
 }
 
+// TestScanProtectBlocked loginprotect 响应判定（对齐 AlongTyRant账号检测报告.md）：
+// 没有 qr 字段 → 保护开启；qr != "0" → 保护开启；qr=="0" → 可扫；code!=110000 → 不拦截。
+func TestScanProtectBlocked(t *testing.T) {
+	cases := map[string]bool{
+		// qr == "0" → 正常可扫
+		`{"code":110000,"data":{"protect":{"location":"0","web":"0","username":"0","qr":"0"}}}`: false,
+		// 数字形态的 0 同样视为可扫
+		`{"code":110000,"data":{"protect":{"qr":0}}}`: false,
+		// 没有 qr 字段 → 保护开启
+		`{"code":110000,"data":{"protect":{"location":"0","web":"0","username":"0"}}}`: true,
+		// qr 非 0 → 保护开启
+		`{"code":110000,"data":{"protect":{"qr":"1"}}}`: true,
+		`{"code":110000,"data":{"protect":{"qr":1}}}`:   true,
+		// code != 110000（凭证无效等）→ 不拦截
+		`{"code":-6,"data":{}}`:                false,
+		`{"code":110000,"data":{}}`:            false, // 无 protect 字段 → 不拦截（无法判定）
+		`{"code":110000}`:                      false,
+		`not json`:                             false,
+	}
+	for in, want := range cases {
+		if got := scanProtectBlocked([]byte(in)); got != want {
+			t.Errorf("scanProtectBlocked(%s) = %v, want %v", in, got, want)
+		}
+	}
+}
+
+// TestDetectScanProtect 全流程：httptest 捕获请求参数/头 → 返回保护开启 → 判定 true，
+// 并校验请求带 cookie/Referer/UA/gid大写。
+func TestDetectScanProtect(t *testing.T) {
+	var gotCookie, gotReferer, gotUA, gotGID string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCookie = r.Header.Get("Cookie")
+		gotReferer = r.Header.Get("Referer")
+		gotUA = r.Header.Get("User-Agent")
+		gotGID = r.URL.Query().Get("gid")
+		if r.URL.Query().Get("tpl") != "pp" || r.URL.Query().Get("client") != "pc" {
+			t.Fatalf("参数不符: %s", r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":110000,"data":{"protect":{"location":"0","web":"0","username":"0"}}}`)) // 无 qr → 保护开启
+	}))
+	defer server.Close()
+	loginProtectURL = server.URL
+
+	if !DetectScanProtect("BDUSS=bduss123", "") {
+		t.Fatal("无 qr 字段应判定为保护开启")
+	}
+	if gotCookie != "BDUSS=bduss123" || gotReferer != "https://passport.baidu.com/v3/securitycenter" {
+		t.Fatalf("请求头不符: cookie=%q referer=%q", gotCookie, gotReferer)
+	}
+	if !strings.Contains(gotUA, "Chrome/") {
+		t.Fatalf("UA 应为 PC Chrome: %q", gotUA)
+	}
+	if gotGID != strings.ToUpper(gotGID) || len(gotGID) != 36 {
+		t.Fatalf("gid 应为大写 UUID: %q", gotGID)
+	}
+}
+
+// TestDetectScanProtectOK qr=="0" → 不拦截；cookie 为空 → 不拦截。
+func TestDetectScanProtectOK(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":110000,"data":{"protect":{"qr":"0"}}}`))
+	}))
+	defer server.Close()
+	loginProtectURL = server.URL
+
+	if DetectScanProtect("BDUSS=bduss123", "") {
+		t.Fatal("qr==0 不应拦截")
+	}
+	server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":110000,"data":{"protect":{"qr":"0"}}}`))
+	}))
+	defer server2.Close()
+	loginProtectURL = server2.URL
+	if DetectScanProtect("", "") {
+		t.Fatal("空 cookie 不应拦截")
+	}
+}
+
+// TestDetectScanProtectNetworkError 接口异常（连接失败/非 110000）→ fail-open 不拦截。
+func TestDetectScanProtectNetworkError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	url := ts.URL
+	ts.Close() // 连接被拒
+	loginProtectURL = url
+	if DetectScanProtect("BDUSS=bduss123", "") {
+		t.Fatal("连接失败应 fail-open 不拦截")
+	}
+}
+
 // TestParseSapiRespErrnoMessage errno 已知错误码应映射中文友好提示。
 func TestParseSapiRespErrnoMessage(t *testing.T) {
 	cases := map[string]string{

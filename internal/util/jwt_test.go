@@ -4,7 +4,7 @@ import "testing"
 
 func TestGenerateAndParseToken(t *testing.T) {
 	secret := "test-secret"
-	token, err := GenerateToken(secret, 1, TokenTypeUser, 42, "hello", "user", 7)
+	token, err := GenerateToken(secret, 1, TokenTypeUser, 42, "hello", "user", "100001", 7)
 	if err != nil {
 		t.Fatalf("GenerateToken error: %v", err)
 	}
@@ -27,7 +27,7 @@ func TestGenerateAndParseToken(t *testing.T) {
 }
 
 func TestParseTokenWrongSecret(t *testing.T) {
-	token, err := GenerateToken("secret-a", 1, TokenTypeAdmin, 0, "root", "super", 0)
+	token, err := GenerateToken("secret-a", 1, TokenTypeAdmin, 0, "root", "super", "", 0)
 	if err != nil {
 		t.Fatalf("GenerateToken error: %v", err)
 	}

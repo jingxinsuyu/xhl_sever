@@ -15,22 +15,24 @@ const (
 
 // Claims 自定义 JWT 载荷
 type Claims struct {
-	Type     string `json:"typ"`      // Token 类型：admin / user
-	UserID   uint64 `json:"uid"`      // 用户/管理员 id（超级管理员为 0）
-	Username string `json:"username"` // 用户名
-	Role     string `json:"role"`     // super / admin / user
-	Ver      int64  `json:"ver"`      // token 版本（用户登录自增，旧 token 失效；管理员恒为 0）
+	Type      string `json:"typ"`      // Token 类型：admin / user
+	UserID    uint64 `json:"uid"`      // 用户/管理员 id（超级管理员为 0）
+	Username  string `json:"username"` // 用户名
+	Role      string `json:"role"`     // super / admin / user
+	ProjectID string `json:"pid"`      // 项目 id（用户 token 按项目隔离版本）
+	Ver       int64  `json:"ver"`      // token 版本（按用户+项目自增，旧 token 失效；管理员恒为 0）
 	jwt.RegisteredClaims
 }
 
-// GenerateToken 生成 JWT
-func GenerateToken(secret string, expireHours int, typ string, userID uint64, username, role string, ver int64) (string, error) {
+// GenerateToken 生成 JWT。projectID 仅用户 token 使用（按项目隔离版本），管理员传空。
+func GenerateToken(secret string, expireHours int, typ string, userID uint64, username, role, projectID string, ver int64) (string, error) {
 	claims := Claims{
-		Type:     typ,
-		UserID:   userID,
-		Username: username,
-		Role:     role,
-		Ver:      ver,
+		Type:      typ,
+		UserID:    userID,
+		Username:  username,
+		Role:      role,
+		ProjectID: projectID,
+		Ver:       ver,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(expireHours) * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

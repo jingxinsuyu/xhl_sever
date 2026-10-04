@@ -24,24 +24,8 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 	// 静态资源（上传的图片 / 软件文件，锚定软件根目录）
 	r.Static("/uploads", cfg.UploadDir())
 
-	// 前端静态托管 + SPA 回退（Vue history 路由）：非 /api、/uploads 的路径，
-	// 存在则返回静态文件，否则回退 index.html，保证前端路由刷新不 404。
-	// 这样前端 dist 由后端直接托管，无需额外 nginx。
-	webDir := cfg.StaticDir()
-	r.NoRoute(func(c *gin.Context) {
-		p := c.Request.URL.Path
-		// 精确匹配 /api/、/uploads/ 前缀（不能只判 /api，否则 /apikeys 这类前端路由被误拦）
-		if strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/uploads/") {
-			c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "not found"})
-			return
-		}
-		fp := filepath.Join(webDir, filepath.Clean(p))
-		if fi, err := os.Stat(fp); err == nil && !fi.IsDir() {
-			c.File(fp)
-			return
-		}
-		c.File(filepath.Join(webDir, "index.html"))
-	})
+	// 后台静态资源 + SPA 回退（见 registerAdminFiles）。
+	registerAdminFiles(r, cfg.StaticDir(), cfg.AdminPath())
 
 	h := handler.New(cfg, rdb)
 
@@ -57,6 +41,13 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 
 	// 第三方开放接口（API Key 鉴权，xhlkey 请求头；明文 JSON，按 key 所属项目）
 	r.POST("/api/open/qrlogin", middleware.AuthApiKey(), h.OpenQrLogin)
+	// BDUSS → 网盘 cookie（仅项目 100001 的 API Key 可调用）
+	r.POST("/api/open/netdisk-cookie", middleware.AuthApiKey(), h.OpenNetdiskCookie)
+
+	// fdev 签发服务（项目 100004 的 API Key 专用）：只做「加密出包」+ rkey，
+	// 不代为请求 sofire、不解密响应（客户端本地带代理发、本地解密）。
+	r.POST("/api/open/fdev/issue", middleware.AuthApiKey(), h.OpenFdevIssue)
+	r.POST("/api/open/fdev/rkey", middleware.AuthApiKey(), h.OpenFdevRkey)
 
 	// 开放平台剩余积分查询（query 传 key，无需鉴权）
 	r.GET("/api/open/balance", h.OpenApiKeyBalance)
@@ -68,6 +59,7 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 		user.POST("/login", h.UserLogin)
 		user.POST("/exchange", h.Exchange) // 兑换按用户名，无需登录
 		user.POST("/unbind", h.UserUnbind)
+		user.POST("/check-scan", middleware.AuthUser(cfg.JWT.Secret), h.CheckScan) // 扫码前账号检测
 
 		// 用户端内容接口（无需登录）
 		user.GET("/carousels", h.GetUserCarousels)
@@ -149,4 +141,64 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 	}
 
 	return r
+}
+
+// registerAdminFiles 注册后台前端静态资源与 SPA 回退。
+// adminPath 非空时：后台只在该随机前缀下提供（如 /ef16e15c12bb/），根路径和其它路径一律 404，
+// 避免后台入口被直接扫到；为空时保持旧行为（挂在根路径，便于本地调试）。
+func registerAdminFiles(r *gin.Engine, webDir, adminPath string) {
+	if adminPath != "" {
+		// 后台前端资源（哈希文件名）与图标只在前缀下暴露
+		r.Static(adminPath+"/assets", filepath.Join(webDir, "assets"))
+		r.StaticFile(adminPath+"/favicon.ico", filepath.Join(webDir, "favicon.ico"))
+	}
+	r.NoRoute(noRouteHandler(webDir, adminPath))
+}
+
+// noRouteHandler 返回 SPA 回退处理器：非 /api、/uploads 的路径，
+// 存在则返回静态文件，否则回退 index.html，保证前端 history 路由刷新不 404。
+func noRouteHandler(webDir, adminPath string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		p := c.Request.URL.Path
+		// 精确匹配 /api/、/uploads/ 前缀（不能只判 /api，否则 /apikeys 这类前端路由被误拦）
+		if strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/uploads/") {
+			c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "not found"})
+			return
+		}
+		if adminPath != "" {
+			// 只有后台前缀下的路径才提供页面，其余（含根路径 /）返回 404
+			if p != adminPath && !strings.HasPrefix(p, adminPath+"/") {
+				c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "not found"})
+				return
+			}
+			if p == adminPath {
+				c.Redirect(http.StatusFound, adminPath+"/") // 补末尾斜杠，保证前端路由 base 正确
+				return
+			}
+			rel := strings.TrimPrefix(p, adminPath)
+			fp := filepath.Join(webDir, filepath.Clean(rel))
+			if fi, err := os.Stat(fp); err == nil && !fi.IsDir() {
+				c.File(fp)
+				return
+			}
+			serveIndex(c, webDir)
+			return
+		}
+		fp := filepath.Join(webDir, filepath.Clean(p))
+		if fi, err := os.Stat(fp); err == nil && !fi.IsDir() {
+			c.File(fp)
+			return
+		}
+		serveIndex(c, webDir)
+	}
+}
+
+// serveIndex 输出后台入口 index.html，并禁用缓存。
+// index.html 引用了带内容哈希的资源文件名，若被浏览器启发式缓存，
+// 发新版后用户仍会跑旧前端（旧 SPA 会把地址跳到 /login，看起来像"后台还能从根路径进"）。
+func serveIndex(c *gin.Context, webDir string) {
+	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+	c.Header("Pragma", "no-cache")
+	c.Header("Expires", "0")
+	c.File(filepath.Join(webDir, "index.html"))
 }

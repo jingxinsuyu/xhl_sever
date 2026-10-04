@@ -6,6 +6,9 @@ server:
   port: 8080
   # 运行模式 debug / release
   mode: debug
+  # 后台管理入口路径前缀（随机字符串，防止根路径暴露后台；如 "/ef16e15c12bb"）
+  # 必须与前端 xhl-admin/.env.production 的 VITE_ADMIN_PATH 完全一致；置空则后台回到根路径
+  admin_path: ""
 
 database:
   host: 127.0.0.1

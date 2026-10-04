@@ -13,6 +13,10 @@ type Server struct {
 	Port      string `yaml:"port"`
 	Mode      string `yaml:"mode"`
 	StaticDir string `yaml:"static_dir"` // 前端静态资源目录（相对 config.yaml 所在目录）
+	// AdminPath 后台管理入口路径前缀（随机字符串，如 /ef16e15c12bb）。
+	// 非空时后台仅在该前缀下提供，其余路径（含根路径 /）一律 404，避免后台被直接扫到；
+	// 为空时保持旧行为（后台挂在根路径，便于本地调试）。
+	AdminPath string `yaml:"admin_path"`
 }
 
 // Database 数据库配置
@@ -132,5 +136,22 @@ func (c *Config) StaticDir() string {
 		return abs
 	}
 	return dir
+}
+
+// AdminPath 返回归一化的后台入口前缀：保证以 "/" 开头、结尾无 "/"。
+// 返回空串表示未配置（后台挂在根路径，兼容旧部署）。
+func (c *Config) AdminPath() string {
+	p := strings.TrimSpace(c.Server.AdminPath)
+	if p == "" || p == "/" {
+		return ""
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	p = strings.TrimRight(p, "/")
+	if p == "" {
+		return ""
+	}
+	return p
 }
 

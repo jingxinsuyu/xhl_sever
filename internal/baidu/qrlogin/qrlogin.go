@@ -5,6 +5,8 @@ package qrlogin
 
 import (
 	"crypto/md5"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +28,15 @@ var sapiURL = "https://passport.baidu.com/v2/sapi/qrlogin?lp="
 
 // requestTimeout 单次确认请求超时。
 const requestTimeout = 15 * time.Second
+
+// loginProtectURL 账号扫码登录保护检测接口（passport v3，见 AlongTyRant账号检测报告.md）。
+var loginProtectURL = "https://passport.baidu.com/v3/api/safe/loginprotect"
+
+// loginProtectUA loginprotect 要求的 PC 版 UA（与确认接口的手机指纹无关）。
+const loginProtectUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
+
+// ScanProtectBlockedMessage 账号开启「扫码登录保护」时对外返回的提示。
+const ScanProtectBlockedMessage = "扫码登录保护被开启(不能扫)"
 
 // Result 一次扫码确认的结果。
 type Result struct {
@@ -235,6 +246,92 @@ func Confirm(qrContent, cookie, proxyAddr string) (Result, error) {
 	}
 
 	return parseSapiResp(body)
+}
+
+// loginProtectResp loginprotect 接口响应。
+type loginProtectResp struct {
+	Code int `json:"code"`
+	Data struct {
+		Protect map[string]interface{} `json:"protect"`
+	} `json:"data"`
+}
+
+// DetectScanProtect 扫码前检测 cookie 账号是否开启「扫码登录保护」。
+// 返回 true = 开启保护，不能扫码确认。判定逻辑（对齐 AlongTyRant账号检测报告.md）：
+//
+//	code != 110000（凭证无效/接口异常）→ 不拦截（fail-open，避免误伤正常账号，交确认流程判真伪）
+//	data.protect 里没有 qr 字段  → 保护开启
+//	qr 存在且 != "0"             → 保护开启
+//	qr == "0"                    → 正常，可扫码
+//
+// proxyAddr 可空：与确认走同一代理（空 = 直连），保证检测与确认同出口。
+func DetectScanProtect(cookie, proxyAddr string) bool {
+	cookie = strings.TrimSpace(cookie)
+	if cookie == "" {
+		return false
+	}
+	client, err := newClient(proxyAddr)
+	if err != nil {
+		return false
+	}
+
+	q := url.Values{}
+	q.Set("adapter", "")
+	q.Set("client", "pc")
+	q.Set("clientfrom", "pc")
+	q.Set("gid", newGID())
+	q.Set("lang", "zh-cn")
+	q.Set("liveAbility", "")
+	q.Set("suppcheck", "")
+	q.Set("tpl", "pp")
+	tt := fmt.Sprintf("%d", time.Now().UnixMilli())
+	q.Set("tt", tt)
+	q.Set("ttt", tt)
+
+	req, err := http.NewRequest(http.MethodGet, loginProtectURL+"?"+q.Encode(), nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("User-Agent", loginProtectUA)
+	req.Header.Set("Cookie", cookie)
+	req.Header.Set("Referer", "https://passport.baidu.com/v3/securitycenter")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return scanProtectBlocked(body)
+}
+
+// scanProtectBlocked 解析 loginprotect 响应，判断账号是否受扫码保护。
+func scanProtectBlocked(body []byte) bool {
+	var j loginProtectResp
+	if json.Unmarshal(body, &j) != nil || j.Code != 110000 {
+		return false
+	}
+	p := j.Data.Protect
+	if p == nil {
+		return false
+	}
+	qr, ok := p["qr"]
+	if !ok { // 没有 qr 字段 → 保护开启
+		return true
+	}
+	return fmt.Sprint(qr) != "0" // qr 非 "0" → 保护开启
+}
+
+// newGID 生成 loginprotect 要求的 gid（UUID v4，大写）。
+func newGID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	s := hex.EncodeToString(b)
+	return strings.ToUpper(s[0:8] + "-" + s[8:12] + "-" + s[12:16] + "-" + s[16:20] + "-" + s[20:32])
 }
 
 // errnoMessages 扫码确认 errno → 中文友好提示（对齐 QrAppLoginResult.java）。

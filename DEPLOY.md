@@ -39,6 +39,7 @@ xhl_sever/
 | `server` | `port` | HTTP 监听端口（本地默认 8080，容器 8888） |
 | `server` | `mode` | `debug` / `release` |
 | `server` | `static_dir` | 前端静态资源目录（相对 config.yaml 所在目录，默认 `web`） |
+| `server` | `admin_path` | 后台入口路径前缀（随机字符串，如 `/ef16e15c12bb`）；**必须与前端 `xhl-admin/.env.production` 的 `VITE_ADMIN_PATH` 一致**；置空则后台回到根路径（旧行为） |
 | `database` | `host/port/user/password/dbname` | MySQL 连接信息；库不存在会自动创建 |
 | `redis` | `host/port/password/db` | Redis 连接信息 |
 | `jwt` | `secret` | JWT 签名密钥，**生产必须换随机值** |
@@ -143,6 +144,7 @@ server:
   port: 8888          # 前后端同源
   mode: release
   static_dir: web     # 托管前端 dist
+  admin_path: "/ef16e15c12bb"   # 后台入口前缀（随机串）；须与前端 VITE_ADMIN_PATH 一致
 
 database:
   host: mysql         # ← compose 服务名，容器内网络互通
@@ -280,7 +282,8 @@ HOST="103.36.223.143"; PORT=512; USER="root"; PASS="<deploy.py 里的密码>"
 ```bash
 # 服务器上（SSH 进去）：
 curl -s http://127.0.0.1:8888/api/health                 # 后端健康
-curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8888/   # 前端 200
+curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8888/                        # 应为 404（根路径不暴露后台）
+curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8888/ef16e15c12bb/            # 应为 200（后台入口）
 docker logs xhl-sever --tail 20                           # 看日志有无报错
 # 新列检查示例：
 docker exec xhl-mysql mysql -uroot -p0KUN0ZsfXGETUpU0 hlong -e "SHOW COLUMNS FROM project LIKE 'call_limit'"

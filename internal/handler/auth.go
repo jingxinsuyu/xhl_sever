@@ -65,7 +65,7 @@ func (h *Handler) AdminLogin(c *gin.Context) {
 			return
 		}
 		token, err := util.GenerateToken(h.Config.JWT.Secret, h.Config.JWT.ExpireHours,
-			util.TokenTypeAdmin, 0, sa.Username, model.RoleSuper, 0)
+			util.TokenTypeAdmin, 0, sa.Username, model.RoleSuper, "", 0)
 		if err != nil {
 			util.Fail(c, util.CodeDBError, "生成 token 失败")
 			return
@@ -93,7 +93,7 @@ func (h *Handler) AdminLogin(c *gin.Context) {
 		return
 	}
 	token, err := util.GenerateToken(h.Config.JWT.Secret, h.Config.JWT.ExpireHours,
-		util.TokenTypeAdmin, admin.ID, admin.Username, model.RoleAdmin, 0)
+		util.TokenTypeAdmin, admin.ID, admin.Username, model.RoleAdmin, "", 0)
 	if err != nil {
 		util.Fail(c, util.CodeDBError, "生成 token 失败")
 		return
@@ -182,8 +182,9 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 
 	// 注册完成立即发放登录 token，无需再次登录（用户 token 1 年有效）
+	// 版本按「用户+卡密项目」从 0 开始（注册即首次登录，无旧 token 需踢）
 	token, err := util.GenerateToken(h.Config.JWT.Secret, h.Config.JWT.UserExpireHours,
-		util.TokenTypeUser, user.ID, user.Username, model.RoleUser, user.TokenVersion)
+		util.TokenTypeUser, user.ID, user.Username, model.RoleUser, ct.ProjectID, 0)
 	if err != nil {
 		util.Fail(c, util.CodeDBError, "系统错误")
 		return
@@ -317,16 +318,16 @@ func (h *Handler) UserLogin(c *gin.Context) {
 		return
 	}
 
-	// 登录使之前的 token 全部失效：token 版本 +1
-	user.TokenVersion++
-	if err := database.DB.Model(&user).Update("token_version", user.TokenVersion).Error; err != nil {
+	// 登录使本项目旧 token 失效：按「用户+项目」自增 binding 的 token_version（不影响其他项目）
+	bindVer, err := h.bumpBindingTokenVersion(user.ID, req.ProjectID)
+	if err != nil {
 		util.Fail(c, util.CodeDBError, "系统错误")
 		return
 	}
 
 	// 登录成功返回：会员过期时间 / 今日登录次数 / 登录次数上限
 	token, err := util.GenerateToken(h.Config.JWT.Secret, h.Config.JWT.UserExpireHours,
-		util.TokenTypeUser, user.ID, user.Username, model.RoleUser, user.TokenVersion)
+		util.TokenTypeUser, user.ID, user.Username, model.RoleUser, req.ProjectID, bindVer)
 	if err != nil {
 		util.Fail(c, util.CodeDBError, "生成 token 失败")
 		return
@@ -378,4 +379,28 @@ func (h *Handler) checkOrBindDevice(user *model.User, projectID string, machineC
 		return false, err
 	}
 	return true, nil
+}
+
+// bumpBindingTokenVersion 自增「用户+项目」的 token 版本并返回新版本。
+// 登录时调用：只使本项目旧 token 失效，不影响用户其他项目的登录态。
+func (h *Handler) bumpBindingTokenVersion(userID uint64, projectID string) (int64, error) {
+	var binding model.UserBinding
+	err := database.DB.Where("user_id = ? AND project_id = ?", userID, projectID).First(&binding).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// 理论上登录前已 checkOrBindDevice 建好 binding；兜底创建
+		binding = model.UserBinding{UserID: userID, ProjectID: projectID, MachineCode: ""}
+		binding.TokenVersion = 0
+		if err := database.DB.Create(&binding).Error; err != nil {
+			return 0, err
+		}
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	newVer := binding.TokenVersion + 1
+	if err := database.DB.Model(&binding).Update("token_version", newVer).Error; err != nil {
+		return 0, err
+	}
+	return newVer, nil
 }

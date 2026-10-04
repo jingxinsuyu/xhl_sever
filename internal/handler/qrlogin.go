@@ -105,6 +105,13 @@ func (h *Handler) QrLogin(c *gin.Context) {
 		}
 	}
 
+	// 扫码登录保护预检：cookie 账号开保护直接拦截（检测异常 fail-open，不误伤）
+	// sendLog("正在检测账号状态")
+	// if qrlogin.DetectScanProtect(cookie, proxyAddr) {
+	// 	sendResult(false, "", qrlogin.ScanProtectBlockedMessage)
+	// 	return
+	// }
+
 	// sendLog("正在生成环境信息")
 
 	sendLog("正在登录")

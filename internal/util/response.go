@@ -30,6 +30,7 @@ const (
 	CodeCallLimitExceed   = 1019 // 今日调用次数已达上限
 	CodeInsufficientBalance = 1020 // 积分不足
 	CodeCaptchaRequired     = 1021 // 需要先通过滑动拼图验证码
+	CodeScanProtect         = 1022 // 账号开启扫码登录保护，不能扫码
 )
 
 // Response 统一响应结构

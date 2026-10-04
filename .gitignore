@@ -3,6 +3,11 @@
 config.yaml
 # 部署脚本（内含服务器 SSH 密码）
 deploy.py
+deploy_*.py
+
+# ===== 本地临时脚本 / 缓存 =====
+_*.py
+__pycache__/
 
 # ===== 编译产物 =====
 xhl_sever-linux
