@@ -353,7 +353,9 @@ Content-Type: application/json
     "headers": { "User-Agent": "…", "Content-Type": "…", "x-device-id": "…", "x-sdk-ver": "…" },
     "x_dev": "6713aa044389e114bd2f1e08b091d7e0",
     "xyus": "26FFD50C4B43FD44828E9D7C3818326C|0",
-    "send_within_seconds": 15
+    "send_within_seconds": 15,
+    "cost": 1,
+    "balance": 5534
   }
 }
 ```
@@ -361,6 +363,7 @@ Content-Type: application/json
 - 调用方把 `body_b64` 解码后，带上 `headers` 里的头，把请求 POST 到 `url`（**用本地代理发**）。
 - 请求里内嵌时间戳（body 的 `now_ms`、URL 的 `ts`），**请在 `send_within_seconds`（15 秒）内发出**。
 - `handle` 是本次出包的凭证，**与创建它的 API Key 绑定**，服务端按它暂存 `FB` **5 分钟**，供 8.2 解密。
+- **计费：本接口（出包）每次扣 1 积分**，调用即扣、与后续成败无关；响应里的 `cost` 是本次扣费、`balance` 是扣后余额；积分不足返回 `1020`。**解密接口 `/open` 不扣费。**
 
 ### 8.2 服务端解密（拿 token）
 
@@ -395,6 +398,7 @@ Content-Type: application/json
 - `st == "56"` 且 `token_bytes == 65`（即 `token` 为 87 字符 base64url）才算签发通过。
 - 解密**成功后该 handle 立即失效**（一次性）；失败可重试，直到 5 分钟过期。
 - 该 handle **只有创建它的那个 API Key 能用**（别的 key 用会返回 1003）。
+- 本接口**不扣费**。
 
 ### 8.3 失败响应
 
@@ -404,6 +408,7 @@ Content-Type: application/json
 | 1002 | 缺少 / 无效 / 已禁用的 xhlkey |
 | 1003 | 不是项目 100004 的 API Key；或该 handle 不属于当前 API Key |
 | 1004 | 项目不存在或已停用；或 handle 不存在/已过期 |
+| 1020 | 积分不足（出包扣费时余额不够） |
 
 ### 8.4 调用示例
 
@@ -429,4 +434,4 @@ curl -s -X POST http://103.36.223.143:8888/api/open/fdev/open \
 1. **一台设备一套 xyus**：不要把同一个 `dev` 分给一批号使用（等于共用设备凭证，会关联）。
 2. **不缓存请求包**：请求包有时效，生成后尽快发；可缓存的是最终 `token`（`nt`≈1800s）。
 3. **`FB` 永不出服务端**：接口只回 URL/Body/Headers 与最终 token，不下发任何密钥材料。
-4. 该服务当前**不扣积分**；如需计费可在后台按项目配置。
+4. **计费**：`/api/open/fdev/issue`（出包）每次扣 **1 积分**，调用即扣；`/api/open/fdev/open`（解密）**不扣费**。改价在 `config.yaml` 的 `cost.fdev_issue_cost`（0=不扣）。

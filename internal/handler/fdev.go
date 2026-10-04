@@ -17,6 +17,7 @@ import (
 	"xhl-server/internal/util"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // fdevProjectID 「fdev签发服务」项目 id（开放平台 API Key 按项目绑定）。
@@ -82,6 +83,24 @@ func (h *Handler) OpenFdevIssue(c *gin.Context) {
 		return
 	}
 
+	// 扣费：出包调用即扣（config.cost.fdev_issue_cost，默认 1 积分/次）；解密接口 /open 不扣费。
+	cost := h.fdevIssueCost()
+	if cost > 0 {
+		res := database.DB.Model(&model.ApiKey{}).
+			Where("`key` = ? AND balance >= ?", ak.Key, cost).
+			Update("balance", gorm.Expr("balance - ?", cost))
+		if res.Error != nil {
+			util.Fail(c, util.CodeDBError, "扣费失败")
+			return
+		}
+		if res.RowsAffected == 0 {
+			util.Fail(c, util.CodeInsufficientBalance, "积分不足")
+			return
+		}
+		// 重新读取扣费后余额返回给调用方
+		database.DB.First(ak, ak.ID)
+	}
+
 	handle, err := fdevNewHandle()
 	if err != nil {
 		util.Fail(c, util.CodeDBError, "系统错误")
@@ -100,6 +119,8 @@ func (h *Handler) OpenFdevIssue(c *gin.Context) {
 		"x_dev":               fr.XDev,
 		"xyus":                fr.XYUS,
 		"send_within_seconds": fdevSendWithinSecs,
+		"cost":                cost,
+		"balance":             ak.Balance,
 	})
 }
 
@@ -180,6 +201,15 @@ func (h *Handler) OpenFdevOpen(c *gin.Context) {
 }
 
 // ---------------------------------------------------------------- 内部工具
+
+// fdevIssueCost 返回 fdev 出包每次的扣费积分（config.cost.fdev_issue_cost，0=不扣）。
+// 解密接口 /open 不扣费。生产配置里已设 1。
+func (h *Handler) fdevIssueCost() int {
+	if h.Config.Cost.FdevIssueCost > 0 {
+		return h.Config.Cost.FdevIssueCost
+	}
+	return 0
+}
 
 // fdevRequireKey 校验开放平台 API Key，并要求它属于「fdev签发服务」项目。
 func (h *Handler) fdevRequireKey(c *gin.Context) (*model.ApiKey, bool) {

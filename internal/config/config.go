@@ -72,6 +72,7 @@ type Upload struct {
 // Cost 扣费配置
 type Cost struct {
 	OpenQrLoginCost int `yaml:"open_qrlogin_cost"` // 开放平台每次扫码确认扣费积分（调用即扣，0=不扣）
+	FdevIssueCost   int `yaml:"fdev_issue_cost"`   // fdev 出包每次扣费积分（调用即扣，0=不扣；解密 /open 不扣费）
 }
 
 // Config 全局配置
