@@ -23,15 +23,16 @@ import (
 const fdevProjectID = "100004"
 
 const (
-	fdevReqKeyPrefix   = "fdev:req:"     // handle -> {fb, xyus}
-	fdevReqTTL         = 10 * time.Minute // 出包后保留 FB 的时长（供 /rkey 用）
-	fdevSendWithinSecs = 15               // 请求包内嵌时间戳，提示调用方尽快发出
+	fdevReqKeyPrefix   = "fdev:req:" // handle -> {fb, xyus, key_id}
+	fdevReqTTL         = 5 * time.Minute // handle 有效期（请求包应 ≤15s 内发出）
+	fdevSendWithinSecs = 15              // 请求包内嵌时间戳，提示调用方尽快发出
 )
 
-// fdevRequestPayload Redis 里暂存的 FB（= f(dev)，仅服务端保留，不下发/不写日志）。
+// fdevRequestPayload Redis 里暂存的 FB（= f(dev)，仅服务端保留，永不下发/不写日志）。
 type fdevRequestPayload struct {
-	FB   string `json:"fb"` // base64(f(dev))
-	XYUS string `json:"xyus"`
+	FB    string `json:"fb"`     // base64(f(dev))
+	XYUS  string `json:"xyus"`   // 设备串
+	KeyID uint64 `json:"key_id"` // 绑定的 API Key id：只有创建它的 key 才能来解密
 }
 
 // OpenFdevIssueRequest 出包入参：给 android_id+uuid，或直接给算好的 xyus。
@@ -41,16 +42,16 @@ type OpenFdevIssueRequest struct {
 	XYUS      string `json:"xyus"`
 }
 
-// OpenFdevIssue 开放平台「加密接口」：生成 sofire z_id 签发的**加密请求包**。
+// OpenFdevIssue 开放平台：生成 sofire z_id 签发的**加密请求包**（服务端只出包）。
 //
-// 服务端只出包（部署姿势 B）：返回 URL / BodyB64 / Headers，由调用方用**本地代理**发出；
-// 服务端**不**代为请求 sofire、**不**解密响应。`FB`（= f(dev)）只留在服务端 Redis，
-// 按 handle 暂存，供后续 /rkey 使用；绝不下发、绝不写日志。
+// 返回 URL / BodyB64 / Headers，由调用方用**本地代理**发出；服务端不代为请求 sofire。
+// `FB`（= f(dev)）只留在服务端 Redis（按 handle，绑定创建它的 API Key），永不下发、不写日志。
 //
 //	POST /api/open/fdev/issue     header: xhlkey
 //	{ "android_id": "…", "uuid": "…" }   或   { "xyus": "32位大写hex|0" }
 func (h *Handler) OpenFdevIssue(c *gin.Context) {
-	if _, ok := h.fdevRequireKey(c); !ok {
+	ak, ok := h.fdevRequireKey(c)
+	if !ok {
 		return
 	}
 
@@ -86,7 +87,7 @@ func (h *Handler) OpenFdevIssue(c *gin.Context) {
 		util.Fail(c, util.CodeDBError, "系统错误")
 		return
 	}
-	if err := h.fdevSaveRequest(handle, fr.FB, fr.XYUS); err != nil {
+	if err := h.fdevSaveRequest(handle, fr.FB, fr.XYUS, ak.ID); err != nil {
 		util.Fail(c, util.CodeDBError, "保存请求包失败")
 		return
 	}
@@ -102,62 +103,79 @@ func (h *Handler) OpenFdevIssue(c *gin.Context) {
 	})
 }
 
-// OpenFdevRkeyRequest 解密辅助入参。
-type OpenFdevRkeyRequest struct {
-	Handle      string `json:"handle"`        // /issue 返回的 handle
-	RespSkeyB64 string `json:"resp_skey_b64"` // 响应里的 skey（base64 原文）
-	RespSkey    string `json:"resp_skey"`     // 兼容写法，同上
+// OpenFdevOpenRequest 服务端解密入参。
+type OpenFdevOpenRequest struct {
+	Handle      string `json:"handle"`       // /issue 返回的 handle
+	ResponseB64 string `json:"response_b64"` // sofire 响应的 base64（原文字节）
+	Response    string `json:"response"`     // 兼容写法：直接给响应原文
 }
 
-// OpenFdevRkey 开放平台「加密接口」：由 handle + 响应里的 skey 算出 rkey。
+// OpenFdevOpen 开放平台：由服务端解密 sofire 响应并直接返回签发结果。
 //
-// rkey = resp_skey XOR FB；调用方拿到 rkey 后在本地解密（服务端不做 AES 解密）：
+// 调用方把 sofire 的**响应原文**回传，服务端用只存在于服务端的 FB 解密
+// （AES-128-CBC 零 IV → 去 PKCS7 → 可能 gunzip → 合并多个 JSON），返回 token/st/nt。
+// FB 与请求明文**都不下发**；handle 与创建它的 API Key 绑定，解密成功后即失效。
 //
-//	data = base64decode(响应.data) → AES-128-CBC(rkey, IV=全0) 解密 → 去 PKCS7
-//	     → 明文可能是 gzip，若可 gunzip 则解压 → 里面可能拼了多个 JSON，逐个解析合并
-//	     → 取 token / st / nt（st="56" 且 token 解码 65 字节才算通过）
-//
-//	POST /api/open/fdev/rkey      header: xhlkey
-//	{ "handle": "…", "resp_skey_b64": "…" }
-func (h *Handler) OpenFdevRkey(c *gin.Context) {
-	if _, ok := h.fdevRequireKey(c); !ok {
+//	POST /api/open/fdev/open      header: xhlkey
+//	{ "handle": "…", "response_b64": "…" }
+func (h *Handler) OpenFdevOpen(c *gin.Context) {
+	ak, ok := h.fdevRequireKey(c)
+	if !ok {
 		return
 	}
 
-	var req OpenFdevRkeyRequest
+	var req OpenFdevOpenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.Fail(c, util.CodeParamError, "参数错误：handle 不能为空")
 		return
 	}
 	req.Handle = strings.TrimSpace(req.Handle)
-	skeyB64 := strings.TrimSpace(req.RespSkeyB64)
-	if skeyB64 == "" {
-		skeyB64 = strings.TrimSpace(req.RespSkey)
+	rawB64 := strings.TrimSpace(req.ResponseB64)
+	if rawB64 == "" {
+		rawB64 = strings.TrimSpace(req.Response)
 	}
-	if req.Handle == "" || skeyB64 == "" {
-		util.Fail(c, util.CodeParamError, "参数错误：handle、resp_skey_b64 不能为空")
+	if req.Handle == "" || rawB64 == "" {
+		util.Fail(c, util.CodeParamError, "参数错误：handle、response_b64 不能为空")
 		return
 	}
 
-	fb, xyus, err := h.fdevLoadRequest(req.Handle)
+	payload, err := h.fdevLoadRequest(req.Handle)
 	if err != nil {
 		util.Fail(c, util.CodeNotFound, "handle 不存在或已过期")
 		return
 	}
-	rskey, err := base64.StdEncoding.DecodeString(skeyB64)
-	if err != nil || len(rskey) < 16 {
-		util.Fail(c, util.CodeParamError, "resp_skey 不是有效的 base64（至少 16 字节）")
+	if payload.KeyID != ak.ID {
+		util.Fail(c, util.CodeForbidden, "该 handle 不属于当前 API Key")
+		return
+	}
+	fb, err := base64.StdEncoding.DecodeString(payload.FB)
+	if err != nil || len(fb) != 16 {
+		util.Fail(c, util.CodeDBError, "系统错误")
 		return
 	}
 
-	rkey := make([]byte, 16)
-	for i := 0; i < 16; i++ {
-		rkey[i] = rskey[i] ^ fb[i]
+	// 响应原文：优先按 base64 解，解不开就当原文用（对非 base64 文本友好）
+	respBody, err := base64.StdEncoding.DecodeString(rawB64)
+	if err != nil {
+		respBody = []byte(rawB64)
 	}
 
+	tok, err := fdev.OpenResponse(respBody, fb)
+	if err != nil {
+		util.Fail(c, util.CodeParamError, "解密失败："+err.Error())
+		return
+	}
+
+	// 解密成功后 handle 立即失效（一次性）
+	h.fdevDeleteRequest(req.Handle)
+
 	util.OK(c, gin.H{
-		"rkey_b64": base64.StdEncoding.EncodeToString(rkey),
-		"xyus":     xyus,
+		"token":       tok.Token,
+		"st":          tok.ST,
+		"nt":          tok.NT,
+		"valid":       tok.Valid(),
+		"token_bytes": tok.TokenBytes(),
+		"xyus":        payload.XYUS,
 	})
 }
 
@@ -182,14 +200,15 @@ func (h *Handler) fdevRequireKey(c *gin.Context) (*model.ApiKey, bool) {
 	return ak, true
 }
 
-// fdevSaveRequest 把 FB 暂存到 Redis（按 handle，TTL 10 分钟）。
-func (h *Handler) fdevSaveRequest(handle string, fb []byte, xyus string) error {
+// fdevSaveRequest 把 FB 暂存到 Redis（按 handle，绑定 API Key id，TTL 5 分钟）。
+func (h *Handler) fdevSaveRequest(handle string, fb []byte, xyus string, keyID uint64) error {
 	if h.Redis == nil {
 		return errors.New("redis 未就绪")
 	}
 	payload, err := json.Marshal(fdevRequestPayload{
-		FB:   base64.StdEncoding.EncodeToString(fb),
-		XYUS: xyus,
+		FB:    base64.StdEncoding.EncodeToString(fb),
+		XYUS:  xyus,
+		KeyID: keyID,
 	})
 	if err != nil {
 		return err
@@ -197,27 +216,31 @@ func (h *Handler) fdevSaveRequest(handle string, fb []byte, xyus string) error {
 	return h.Redis.Set(context.Background(), fdevReqKeyPrefix+handle, payload, fdevReqTTL).Err()
 }
 
-// fdevLoadRequest 取出 handle 对应的 FB。
-func (h *Handler) fdevLoadRequest(handle string) ([]byte, string, error) {
+// fdevLoadRequest 取出 handle 对应的暂存数据。
+func (h *Handler) fdevLoadRequest(handle string) (*fdevRequestPayload, error) {
 	if h.Redis == nil {
-		return nil, "", errors.New("redis 未就绪")
+		return nil, errors.New("redis 未就绪")
 	}
 	raw, err := h.Redis.Get(context.Background(), fdevReqKeyPrefix+handle).Bytes()
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	var p fdevRequestPayload
 	if err := json.Unmarshal(raw, &p); err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	fb, err := base64.StdEncoding.DecodeString(p.FB)
-	if err != nil {
-		return nil, "", err
+	if p.FB == "" {
+		return nil, errors.New("payload 异常")
 	}
-	if len(fb) != 16 {
-		return nil, "", errors.New("fb 长度异常")
+	return &p, nil
+}
+
+// fdevDeleteRequest 让 handle 立即失效（一次性）。
+func (h *Handler) fdevDeleteRequest(handle string) {
+	if h.Redis == nil {
+		return
 	}
-	return fb, p.XYUS, nil
+	_ = h.Redis.Del(context.Background(), fdevReqKeyPrefix+handle).Err()
 }
 
 // fdevNewHandle 生成一次性的 handle（16 字节随机 hex）。

@@ -321,8 +321,8 @@ else:
 ## 8. fdev 签发服务（百度 sofire `z_id` 加密出包）
 
 > 面向项目 **100004（fdev签发服务）** 发放的 API Key。
-> 服务端**只出加密包**：**不**代为请求 sofire、**不**解密响应；请求由调用方用**本地代理**发出，响应由调用方用拿到的 `rkey` **本地解密**。
-> `FB`（= f(dev)，设备凭证派生结果）**只留在服务端**，绝不下发、绝不写日志。
+> 服务端**出加密包**，并**负责解密响应**：请求由调用方用**本地代理**发出，响应原文回传服务端解密，直接拿到 `token`。
+> `FB`（= f(dev)，设备凭证派生结果）**只存在服务端**，绝不下发、绝不写日志。
 
 ### 8.1 出包
 
@@ -360,40 +360,50 @@ Content-Type: application/json
 
 - 调用方把 `body_b64` 解码后，带上 `headers` 里的头，把请求 POST 到 `url`（**用本地代理发**）。
 - 请求里内嵌时间戳（body 的 `now_ms`、URL 的 `ts`），**请在 `send_within_seconds`（15 秒）内发出**。
-- `handle` 是本次出包的凭证；`FB` 由服务端按它暂存 **10 分钟**，供 8.2 使用。
+- `handle` 是本次出包的凭证，**与创建它的 API Key 绑定**，服务端按它暂存 `FB` **5 分钟**，供 8.2 解密。
 
-### 8.2 取 rkey（供本地解密）
+### 8.2 服务端解密（拿 token）
 
 ```
-POST /api/open/fdev/rkey
+POST /api/open/fdev/open
 xhlkey: sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 Content-Type: application/json
 
-{ "handle": "…", "resp_skey_b64": "响应里的 skey（base64 原文）" }
+{ "handle": "…", "response_b64": "sofire 响应原文的 base64" }
 ```
+
+> `response_b64` 也可写成 `response` 直接传响应原文（非 base64 时按原文处理）。
 
 成功响应：
 
 ```json
-{ "code": 0, "message": "ok", "data": { "rkey_b64": "…", "xyus": "…" } }
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "token": "…87 字符 base64url…",
+    "st": "56",
+    "nt": 1800,
+    "valid": true,
+    "token_bytes": 65,
+    "xyus": "26FFD50C4B43FD44828E9D7C3818326C|0"
+  }
+}
 ```
 
-拿到 `rkey` 后在**本地**解密：
-
-1. `data  = base64decode(响应.data)`
-2. `plain = AES-128-CBC(rkey, IV=全0) 解密 → 去 PKCS7`
-3. 明文可能被 gzip 过，若可 gunzip 则解压
-4. 明文里可能拼了**多个 JSON 对象**，逐个解析并合并
-5. 取 `token` / `st` / `nt`：`st == "56"` 且 `token` 解码后 **65 字节** 才算通过（`token` 为 87 字符 base64url）
+- 服务端用**只存在于服务端的 `FB`** 解密（AES-128-CBC 零 IV → 去 PKCS7 → 可能 gunzip → 合并多个 JSON），只回 `token/st/nt`。
+- `st == "56"` 且 `token_bytes == 65`（即 `token` 为 87 字符 base64url）才算签发通过。
+- 解密**成功后该 handle 立即失效**（一次性）；失败可重试，直到 5 分钟过期。
+- 该 handle **只有创建它的那个 API Key 能用**（别的 key 用会返回 1003）。
 
 ### 8.3 失败响应
 
 | code | 含义 |
 |---|---|
-| 1001 | 参数错误（缺 android_id+uuid / xyus，或 handle、resp_skey_b64） |
+| 1001 | 参数错误（缺 android_id+uuid / xyus，或 handle、response_b64）；或响应解密失败 |
 | 1002 | 缺少 / 无效 / 已禁用的 xhlkey |
-| 1003 | 不是项目 100004 的 API Key |
-| 1004 | 项目不存在或已停用；`/rkey` 时表示 handle 不存在或已过期 |
+| 1003 | 不是项目 100004 的 API Key；或该 handle 不属于当前 API Key |
+| 1004 | 项目不存在或已停用；或 handle 不存在/已过期 |
 
 ### 8.4 调用示例
 
@@ -406,15 +416,17 @@ curl -s -X POST http://103.36.223.143:8888/api/open/fdev/issue \
   -d '{"android_id":"0123456789abcdef","uuid":"12345678-0000-4000-8000-000000000000"}'
 
 # 2) 用本地代理发出：body = base64decode(data.body_b64)，headers 用 data.headers，POST 到 data.url
+#    拿到响应原文 raw
 
-# 3) 取 rkey 并本地解密
-curl -s -X POST http://103.36.223.143:8888/api/open/fdev/rkey \
+# 3) 回传响应原文，服务端解密拿 token
+curl -s -X POST http://103.36.223.143:8888/api/open/fdev/open \
   -H "xhlkey: $KEY" -H "Content-Type: application/json" \
-  -d '{"handle":"<上一步 handle>","resp_skey_b64":"<响应里的 skey>"}'
+  -d "{\"handle\":\"<上一步 handle>\",\"response_b64\":\"$(printf '%s' "$raw" | base64 -w0)\"}"
 ```
 
 ### 8.5 注意
 
 1. **一台设备一套 xyus**：不要把同一个 `dev` 分给一批号使用（等于共用设备凭证，会关联）。
 2. **不缓存请求包**：请求包有时效，生成后尽快发；可缓存的是最终 `token`（`nt`≈1800s）。
-3. 该服务当前**不扣积分**；如需计费可在后台按项目配置。
+3. **`FB` 永不出服务端**：接口只回 URL/Body/Headers 与最终 token，不下发任何密钥材料。
+4. 该服务当前**不扣积分**；如需计费可在后台按项目配置。

@@ -44,10 +44,10 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 	// BDUSS → 网盘 cookie（仅项目 100001 的 API Key 可调用）
 	r.POST("/api/open/netdisk-cookie", middleware.AuthApiKey(), h.OpenNetdiskCookie)
 
-	// fdev 签发服务（项目 100004 的 API Key 专用）：只做「加密出包」+ rkey，
-	// 不代为请求 sofire、不解密响应（客户端本地带代理发、本地解密）。
+	// fdev 签发服务（项目 100004 的 API Key 专用）：出加密包 + 服务端解密。
+	// FB 只留服务端，永不下发；handle 与创建它的 API Key 绑定、解密成功后即失效。
 	r.POST("/api/open/fdev/issue", middleware.AuthApiKey(), h.OpenFdevIssue)
-	r.POST("/api/open/fdev/rkey", middleware.AuthApiKey(), h.OpenFdevRkey)
+	r.POST("/api/open/fdev/open", middleware.AuthApiKey(), h.OpenFdevOpen)
 
 	// 开放平台剩余积分查询（query 传 key，无需鉴权）
 	r.GET("/api/open/balance", h.OpenApiKeyBalance)
