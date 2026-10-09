@@ -169,9 +169,10 @@ func (h *Handler) ListCards(c *gin.Context) {
 
 	query := database.DB.Table("card AS cd").
 		Select("cd.id, cd.cdkey, cd.type_id, cd.user_id, cd.used_at, cd.created_at, "+
-			"cd.granted_kind, cd.granted_amount, cd.remark, ct.name AS type_name, ct.days, ct.kind AS ct_kind, ct.amount AS ct_amount, u.username AS username").
+			"cd.granted_kind, cd.granted_amount, cd.remark, cd.agent_id, cd.settle_id, ag.name AS agent_name, ct.name AS type_name, ct.days, ct.kind AS ct_kind, ct.amount AS ct_amount, u.username AS username").
 		Joins("LEFT JOIN card_type AS ct ON ct.id = cd.type_id").
 		Joins("LEFT JOIN user AS u ON u.id = cd.user_id").
+		Joins("LEFT JOIN agent AS ag ON ag.id = cd.agent_id").
 		Where("cd.project_id = ?", projectID)
 
 		// 按代理筛选：agent_id=0 表示自营（无代理）
@@ -179,6 +180,14 @@ func (h *Handler) ListCards(c *gin.Context) {
 		query = query.Where("cd.type_id = ?", typeID)
 	}
 	// keyword 同时匹配卡密 cdkey、使用人用户名 和 开卡备注
+	if v := strings.TrimSpace(c.Query("agent_id")); v != "" {
+		if agID, err := strconv.ParseUint(v, 10, 64); err == nil {
+			query = query.Where("cd.agent_id = ?", agID)
+		}
+	}
+	if c.Query("unsettled") == "1" {
+		query = query.Where("cd.settle_id = 0")
+	}
 	if keyword != "" {
 		like := "%" + keyword + "%"
 		query = query.Where("(cd.cdkey LIKE ? OR u.username LIKE ? OR cd.remark LIKE ?)", like, like, like)
@@ -213,9 +222,18 @@ func (h *Handler) ListCards(c *gin.Context) {
 	countQ := database.DB.Table("card AS cd").
 		Joins("LEFT JOIN card_type AS ct ON ct.id = cd.type_id").
 		Joins("LEFT JOIN user AS u ON u.id = cd.user_id").
+		Joins("LEFT JOIN agent AS ag ON ag.id = cd.agent_id").
 		Where("cd.project_id = ?", projectID)
 	if typeID > 0 {
 		countQ = countQ.Where("cd.type_id = ?", typeID)
+	}
+	if v := strings.TrimSpace(c.Query("agent_id")); v != "" {
+		if agID, err := strconv.ParseUint(v, 10, 64); err == nil {
+			countQ = countQ.Where("cd.agent_id = ?", agID)
+		}
+	}
+	if c.Query("unsettled") == "1" {
+		countQ = countQ.Where("cd.settle_id = 0")
 	}
 	if keyword != "" {
 		like := "%" + keyword + "%"
@@ -284,6 +302,9 @@ func (h *Handler) ListCards(c *gin.Context) {
 			UserID:    r.UserID,
 			Username:  r.Username,
 			Remark:    r.Remark,
+			AgentID:   r.AgentID,
+			AgentName: r.AgentName,
+			Settled:   r.SettleID > 0,
 			CreatedAt: r.CreatedAt.Format("2006-01-02 15:04:05"),
 		}
 		if r.UsedAt != nil {
