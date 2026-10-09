@@ -77,12 +77,13 @@ type Client struct {
 	hc *http.Client
 }
 
-// Result 设置成功后的结果。
+// Result 设置成功后的结果（仅服务端内部使用，不对外返回；
+// 因此不带 json tag，避免以后被顺手 marshal 出去把图片信息泄给调用方）。
 type Result struct {
-	PicID        string `json:"pic_id"`        // 形象图 pic_id（= figure_pid）
-	PicIDEncode  string `json:"pic_id_encode"` // 用于拼形象图地址
-	FigureURL    string `json:"figure_url"`    // 设置后的形象图地址
-	ResourceLink string `json:"resource_link"` // meta 上传得到的 url
+	PicID        string // 形象图 pic_id（= figure_pid）
+	PicIDEncode  string // 用于拼形象图地址
+	FigureURL    string // 设置后的形象图地址
+	ResourceLink string // meta 上传得到的 url
 }
 
 // NewClient 构造客户端（addr 为空则直连）。

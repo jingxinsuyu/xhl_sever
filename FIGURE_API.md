@@ -67,8 +67,6 @@ form: ck=<完整 cookie>&image=<图片文件>
   "message": "ok",
   "data": {
     "ok": true,
-    "pic_id": "9f2c…",
-    "figure_url": "http://tiebapic.baidu.com/figure/pic/item/xxxx.jpg",
     "billing_mode": "per_call",   // 用户端返回
     "cost": 1,
     "remaining": 4,               // 用户端：扣完还剩几次
@@ -77,6 +75,8 @@ form: ck=<完整 cookie>&image=<图片文件>
   }
 }
 ```
+
+> **只回「成功 + 计费结果」，不回图片信息**：`pic_id` / `figure_url` 都不返回（服务端内部用完即弃）。
 
 失败：`code != 0`，`message` 是可读原因（如 `设置失败：提交形象失败：{"error":"登录失效"}`），**且不扣费**。
 

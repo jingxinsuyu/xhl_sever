@@ -194,7 +194,8 @@ func (h *Handler) XhlFigureSet(c *gin.Context) {
 	}
 
 	cl := h.newTiebaClient(ck, proxyAddr)
-	res, err := cl.SetFigure(c.Request.Context(), image, tieba.DefaultMeta)
+	// 只要成败,不要图片信息(不返回给调用方)
+	_, err := cl.SetFigure(c.Request.Context(), image, tieba.DefaultMeta)
 	if err != nil {
 		msg := err.Error()
 		h.logCall(c, CallLogEntry{
@@ -229,15 +230,20 @@ func (h *Handler) XhlFigureSet(c *gin.Context) {
 		}(),
 		Started: started,
 	})
-	util.OK(c, gin.H{
+	// 只回「成功/计费结果」,不回图片信息(pic_id / figure_url 不外泄)
+	util.OK(c, figureUserPayload(mode, unit, balanceAfter))
+}
+
+// figureUserPayload 用户端「设置虚拟形象」成功返回:只含成败与计费信息。
+// 注意:不要往里加 pic_id / figure_url —— 需求是「设置成功就行,不返回图片信息」。
+func figureUserPayload(mode string, unit, balanceAfter int) gin.H {
+	return gin.H{
 		"ok":           true,
-		"pic_id":       res.PicID,
-		"figure_url":   res.FigureURL,
 		"billing_mode": mode,
 		"cost":         unit,
 		"remaining":    balanceAfter,
 		"hint":         "App 里退出重进 / 下拉刷新才能看到新形象",
-	})
+	}
 }
 
 // OpenFigureSet 开放平台：设置贴吧虚拟形象（form 提交 ck + 图片）。
@@ -275,7 +281,8 @@ func (h *Handler) OpenFigureSet(c *gin.Context) {
 	}
 
 	cl := h.newTiebaClient(ck, proxyAddr)
-	res, err := cl.SetFigure(c.Request.Context(), image, tieba.DefaultMeta)
+	// 只要成败,不要图片信息(不返回给调用方)
+	_, err := cl.SetFigure(c.Request.Context(), image, tieba.DefaultMeta)
 	if err != nil {
 		msg := err.Error()
 		h.logCall(c, CallLogEntry{
@@ -303,12 +310,17 @@ func (h *Handler) OpenFigureSet(c *gin.Context) {
 		ApiKeyID: ak.ID, ApiKeyName: ak.Name, Ok: true, Message: "设置成功",
 		CostKind: model.CardKindCredits, Cost: cost, Started: started,
 	})
-	util.OK(c, gin.H{
-		"ok":         true,
-		"pic_id":     res.PicID,
-		"figure_url": res.FigureURL,
-		"cost":       cost,
-		"balance":    ak.Balance,
-		"hint":       "App 里退出重进 / 下拉刷新才能看到新形象",
-	})
+	// 只回「成功/计费结果」,不回图片信息(pic_id / figure_url 不外泄)
+	util.OK(c, figureOpenPayload(cost, ak.Balance))
+}
+
+// figureOpenPayload 开放平台「设置虚拟形象」成功返回:只含成败与积分余额。
+// 注意:同样不要加 pic_id / figure_url。
+func figureOpenPayload(cost, balance int) gin.H {
+	return gin.H{
+		"ok":      true,
+		"cost":    cost,
+		"balance": balance,
+		"hint":    "App 里退出重进 / 下拉刷新才能看到新形象",
+	}
 }
