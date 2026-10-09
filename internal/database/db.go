@@ -47,6 +47,10 @@ func Init(cfg *config.Database) error {
 		&model.RichTextAd{},
 		&model.CardType{},
 		&model.Card{},
+		&model.Agent{},          // v2：代理商档案（不是登录账号）
+		&model.AgentPrice{},     // v2：代理 × 卡密类型 单价
+		&model.CardSettlement{}, // v2：代理卡结算单
+		&model.AgentOrder{},     // v2：代理订单（开卡即落单，单价快照）
 		&model.CkData{},
 		&model.ApiKey{},
 		&model.CallLog{},    // v2：调用记录（按项目）

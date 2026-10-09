@@ -236,6 +236,7 @@ func (h *Handler) AgentStats(c *gin.Context) {
 // SettleCards 结算：把勾选的卡按「代理 × 类型」单价汇总成一张结算单，并把卡标记为已结算。
 //
 //	POST /api/admin/cards/settle  {card_ids:[1,2,3], remark:"10 月对账"}
+//
 // 约束：一次只能结算同一个代理名下的卡；已结算过的卡不能重复结算。
 func (h *Handler) SettleCards(c *gin.Context) {
 	var req struct {
@@ -367,28 +368,37 @@ func agentPriceMap() map[uint64]int64 {
 
 // agentStatOf 统计代理名下的卡：张数、已用张数、卡价值（按代理单价）、已结算/未结算金额
 func agentStatOf(projectID string, agentID uint64, prices map[uint64]int64) gin.H {
+	// 口径：按【订单快照单价】统计，和「代理订单」页完全一致。
+	// 没挂订单的老卡（order_id=0）回退用当前代理价。
 	type row struct {
-		TypeID uint64
-		Cnt    int64
-		Used   int64
+		OrderID uint64
+		Unit    int64
+		Cnt     int64
+		Used    int64
 		Settled int64
+		TypeID  uint64
 	}
 	var rows []row
-	database.DB.Model(&model.Card{}).
-		Select("type_id, COUNT(*) AS cnt, SUM(CASE WHEN user_id IS NOT NULL THEN 1 ELSE 0 END) AS used, "+
-			"SUM(CASE WHEN settle_id > 0 THEN 1 ELSE 0 END) AS settled").
-		Where("project_id = ? AND agent_id = ?", projectID, agentID).
-		Group("type_id").Scan(&rows)
+	database.DB.Table("card AS cd").
+		Select("cd.order_id, COALESCE(o.unit_cents, 0) AS unit, cd.type_id, COUNT(*) AS cnt, "+
+			"SUM(CASE WHEN cd.user_id IS NOT NULL THEN 1 ELSE 0 END) AS used, "+
+			"SUM(CASE WHEN cd.settle_id > 0 THEN 1 ELSE 0 END) AS settled").
+		Joins("LEFT JOIN agent_order AS o ON o.id = cd.order_id").
+		Where("cd.project_id = ? AND cd.agent_id = ?", projectID, agentID).
+		Group("cd.order_id, o.unit_cents, cd.type_id").Scan(&rows)
 
 	var cards, used, settledCards, value, settledValue, unsettledValue int64
 	for _, r := range rows {
-		p := prices[priceKey(agentID, r.TypeID)]
+		unit := r.Unit
+		if r.OrderID == 0 { // 没订单的老卡：用当前代理价兜底
+			unit = prices[priceKey(agentID, r.TypeID)]
+		}
 		cards += r.Cnt
 		used += r.Used
 		settledCards += r.Settled
-		value += r.Cnt * p
-		settledValue += r.Settled * p
-		unsettledValue += (r.Cnt - r.Settled) * p
+		value += r.Cnt * unit
+		settledValue += r.Settled * unit
+		unsettledValue += (r.Cnt - r.Settled) * unit
 	}
 	return gin.H{
 		"agent_id": agentID,

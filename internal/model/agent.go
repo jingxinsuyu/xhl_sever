@@ -36,6 +36,7 @@ type CardSettlement struct {
 	ProjectID   string    `gorm:"not null;size:6;index" json:"project_id"`
 	AgentID     uint64    `gorm:"not null;index" json:"agent_id"`
 	AgentName   string    `gorm:"size:64;not null;default:''" json:"agent_name"`
+	OrderID     uint64    `gorm:"not null;default:0;index" json:"order_id"` // v2：挂到代理订单上
 	CardCount   int       `gorm:"not null;default:0" json:"card_count"` // 本次结算张数
 	UsedCount   int       `gorm:"not null;default:0" json:"used_count"` // 其中已使用的张数
 	AmountCents int64     `gorm:"not null;default:0" json:"amount_cents"`

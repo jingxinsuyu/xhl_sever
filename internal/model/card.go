@@ -21,8 +21,9 @@ type Card struct {
 	GrantedAmount int    `gorm:"not null;default:0" json:"granted_amount"`
 	// ---- v2 新增：开卡备注（发放批次/渠道/客户等，便于对账；只增列，不动老数据）----
 	Remark string `gorm:"size:255;not null;default:''" json:"remark"`
-	// ---- v2 新增：代理归属与结算（agent_id=0 表示自营；settle_id=0 表示未结算）----
+	// ---- v2 新增：代理归属/订单与结算（agent_id=0 表示自营；settle_id=0 表示未结算）----
 	AgentID   uint64     `gorm:"not null;default:0;index" json:"agent_id"`
+	OrderID   uint64     `gorm:"not null;default:0;index" json:"order_id"`
 	SettleID  uint64     `gorm:"not null;default:0;index" json:"settle_id"`
 	SettledAt *time.Time `json:"settled_at"`
 	CreatedAt time.Time  `json:"created_at"`

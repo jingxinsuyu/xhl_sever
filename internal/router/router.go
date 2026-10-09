@@ -129,7 +129,10 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 		admin.PUT("/agents/:id/prices", middleware.AuthAdmin(cfg.JWT.Secret), h.SaveAgentPrices)
 		admin.GET("/agents/:id/stats", middleware.AuthAdmin(cfg.JWT.Secret), h.AgentStats)
 		admin.GET("/agents/:id/settlements", middleware.AuthAdmin(cfg.JWT.Secret), h.ListSettlements)
-		admin.POST("/cards/settle", middleware.AuthAdmin(cfg.JWT.Secret), h.SettleCards)
+		admin.GET("/projects/:id/agent-orders", middleware.AuthAdmin(cfg.JWT.Secret), h.ListAgentOrders)
+		admin.POST("/agent-orders/settle-by-cards", middleware.AuthAdmin(cfg.JWT.Secret), h.SettleOrderByCards)
+		admin.PUT("/agent-orders/:id/price", middleware.AuthAdmin(cfg.JWT.Secret), h.UpdateAgentOrderPrice)
+		admin.GET("/agent-orders/:id/export", middleware.AuthAdmin(cfg.JWT.Secret), h.ExportAgentOrder)
 
 		// 版本管理（按项目）
 		admin.GET("/projects/:id/versions", middleware.AuthAdmin(cfg.JWT.Secret), h.ListVersions)

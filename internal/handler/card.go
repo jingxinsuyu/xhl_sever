@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"xhl-server/internal/database"
+	"xhl-server/internal/middleware"
 	"xhl-server/internal/model"
 	"xhl-server/internal/util"
 
@@ -60,6 +61,34 @@ func (h *Handler) GenerateCards(c *gin.Context) {
 		return
 	}
 	// 代理归属：可选（0=自营）。代理只是业务档案，不是登录账号。
+	// 代理卡：先落一张订单（记下单时的代理单价快照），卡再挂到订单上
+	var orderID uint64
+	if req.AgentID > 0 {
+		var ag model.Agent
+		unit := int64(0)
+		agName := ""
+		if err := database.DB.First(&ag, req.AgentID).Error; err == nil {
+			agName = ag.Name
+			var ap model.AgentPrice
+			if e2 := database.DB.Where("agent_id = ? AND card_type_id = ?", req.AgentID, req.TypeID).First(&ap).Error; e2 == nil {
+				unit = ap.PriceCents
+			}
+		}
+		op := ""
+		if cl := middleware.GetClaims(c); cl != nil {
+			op = cl.Username
+		}
+		od := model.AgentOrder{
+			ProjectID: ct.ProjectID, AgentID: req.AgentID, AgentName: agName,
+			CardTypeID: req.TypeID, TypeName: ct.Name, Count: len(keys),
+			UnitCents: unit, AmountCents: unit * int64(len(keys)),
+			Remark: remark, Operator: op,
+		}
+		if err := database.DB.Create(&od).Error; err == nil {
+			orderID = od.ID
+		}
+	}
+
 	cards := make([]model.Card, 0, len(keys))
 	for _, k := range keys {
 		cards = append(cards, model.Card{
@@ -70,6 +99,7 @@ func (h *Handler) GenerateCards(c *gin.Context) {
 			GrantedAmount: amount,
 			Remark:        remark,
 			AgentID:       req.AgentID,
+			OrderID:       orderID,
 		})
 	}
 	if err := database.DB.CreateInBatches(cards, 500).Error; err != nil {
@@ -78,9 +108,9 @@ func (h *Handler) GenerateCards(c *gin.Context) {
 	}
 
 	h.recordAudit(c, model.AuditCardGenerate, ct.ProjectID, "card_type:"+strconv.FormatUint(ct.ID, 10),
-		gin.H{"type_name": ct.Name, "kind": kind, "amount": amount, "count": len(keys), "remark": remark, "agent_id": req.AgentID})
+		gin.H{"type_name": ct.Name, "kind": kind, "amount": amount, "count": len(keys), "remark": remark, "agent_id": req.AgentID, "order_id": orderID})
 	util.OK(c, gin.H{"count": len(keys), "project_id": ct.ProjectID, "type_id": req.TypeID,
-		"kind": kind, "amount": amount, "remark": remark, "agent_id": req.AgentID, "cdkeys": keys})
+		"kind": kind, "amount": amount, "remark": remark, "agent_id": req.AgentID, "order_id": orderID, "cdkeys": keys})
 }
 
 // cardRow 卡密查询行（联表 card + card_type + user）
@@ -116,8 +146,8 @@ type CardListItem struct {
 	Amount    int     `json:"amount"` // v2：发放数量
 	Status    int     `json:"status"` // 0 未使用 / 1 已使用
 	UserID    *uint64 `json:"user_id"`
-	Username  string  `json:"username"` // 使用人用户名（反查）
-	Remark    string  `json:"remark"`   // v2：开卡备注
+	Username  string  `json:"username"`   // 使用人用户名（反查）
+	Remark    string  `json:"remark"`     // v2：开卡备注
 	AgentID   uint64  `json:"agent_id"`   // v2：代理归属（0=自营）
 	AgentName string  `json:"agent_name"` // v2：代理名
 	Settled   bool    `json:"settled"`    // v2：是否已结算
@@ -139,18 +169,12 @@ func (h *Handler) ListCards(c *gin.Context) {
 
 	query := database.DB.Table("card AS cd").
 		Select("cd.id, cd.cdkey, cd.type_id, cd.user_id, cd.used_at, cd.created_at, "+
-			"cd.granted_kind, cd.granted_amount, cd.remark, cd.agent_id, cd.settle_id, ag.name AS agent_name, ct.name AS type_name, ct.days, ct.kind AS ct_kind, ct.amount AS ct_amount, u.username AS username").
+			"cd.granted_kind, cd.granted_amount, cd.remark, ct.name AS type_name, ct.days, ct.kind AS ct_kind, ct.amount AS ct_amount, u.username AS username").
 		Joins("LEFT JOIN card_type AS ct ON ct.id = cd.type_id").
 		Joins("LEFT JOIN user AS u ON u.id = cd.user_id").
-		Joins("LEFT JOIN agent AS ag ON ag.id = cd.agent_id").
 		Where("cd.project_id = ?", projectID)
 
-	// 按代理筛选：agent_id=0 表示自营（无代理）
-	if agStr := strings.TrimSpace(c.Query("agent_id")); agStr != "" {
-		if agID, err := strconv.ParseUint(agStr, 10, 64); err == nil {
-			query = query.Where("cd.agent_id = ?", agID)
-		}
-	}
+		// 按代理筛选：agent_id=0 表示自营（无代理）
 	if typeID > 0 {
 		query = query.Where("cd.type_id = ?", typeID)
 	}
@@ -196,11 +220,6 @@ func (h *Handler) ListCards(c *gin.Context) {
 	if keyword != "" {
 		like := "%" + keyword + "%"
 		countQ = countQ.Where("(cd.cdkey LIKE ? OR u.username LIKE ? OR cd.remark LIKE ?)", like, like, like)
-	}
-	if agStr := strings.TrimSpace(c.Query("agent_id")); agStr != "" {
-		if agID, err := strconv.ParseUint(agStr, 10, 64); err == nil {
-			countQ = countQ.Where("cd.agent_id = ?", agID)
-		}
 	}
 	switch statusStr {
 	case "0":
@@ -265,9 +284,6 @@ func (h *Handler) ListCards(c *gin.Context) {
 			UserID:    r.UserID,
 			Username:  r.Username,
 			Remark:    r.Remark,
-			AgentID:   r.AgentID,
-			AgentName: r.AgentName,
-			Settled:   r.SettleID > 0,
 			CreatedAt: r.CreatedAt.Format("2006-01-02 15:04:05"),
 		}
 		if r.UsedAt != nil {
