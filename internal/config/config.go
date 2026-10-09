@@ -73,6 +73,7 @@ type Upload struct {
 type Cost struct {
 	OpenQrLoginCost int `yaml:"open_qrlogin_cost"` // 开放平台每次扫码确认扣费积分（调用即扣，0=不扣）
 	FdevIssueCost   int `yaml:"fdev_issue_cost"`   // fdev 出包每次扣费积分（调用即扣，0=不扣；解密 /open 不扣费）
+	OpenFigureCost  int `yaml:"open_figure_cost"`  // 贴吧虚拟形象每次设置成功扣费积分（成功才扣；默认 1）
 }
 
 // Log 记录相关配置
@@ -80,6 +81,14 @@ type Log struct {
 	// RetainDays 调用记录（call_log）保留天数：0/缺省 = 90 天。
 	// 想完全不清就填一个很大的数（比如 36500）；扣费账本（billing_log）不受这里影响，永不自动清理。
 	RetainDays int `yaml:"retain_days"`
+}
+
+// Tieba 贴吧接口地址（留空用官方地址）。
+// 放出来是为了两件事：Baidu 换域名时不用改代码；本地自测可以指到 mock 服务上。
+type Tieba struct {
+	UploadURL string `yaml:"upload_url"`
+	MetaURL   string `yaml:"meta_url"`
+	SubmitURL string `yaml:"submit_url"`
 }
 
 // Config 全局配置
@@ -93,6 +102,7 @@ type Config struct {
 	SuperAdmin SuperAdmin `yaml:"super_admin"`
 	Upload     Upload     `yaml:"upload"`
 	Log        Log        `yaml:"log"`
+	Tieba      Tieba      `yaml:"tieba"`
 
 	// BaseDir 配置文件所在目录（软件根目录），供相对路径（如 upload.dir）解析基准，不来自 yaml。
 	BaseDir string `yaml:"-"`

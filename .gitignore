@@ -32,6 +32,7 @@ project_id_migration_backup_*.json
 !API.md
 !OPEN_API.md
 !FDEV_API.md
+!FIGURE_API.md
 !SLIDE_CAPTCHA.md
 !设计文档_v2.md
 !部署手册_v2.md

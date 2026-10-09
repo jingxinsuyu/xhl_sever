@@ -37,6 +37,15 @@ func (h *Handler) openQrLoginCost() int {
 	return 0
 }
 
+// openFigureCost 返回开放平台每次"设置贴吧虚拟形象"的扣费积分
+// （config.cost.open_figure_cost；配置里没写或写了 0 都按 1 算 —— 这是按次卖的服务，默认收费）。
+func (h *Handler) openFigureCost() int {
+	if h.Config.Cost.OpenFigureCost > 0 {
+		return h.Config.Cost.OpenFigureCost
+	}
+	return 1
+}
+
 // ApiKeyItem 后台 API Key 列表项。
 type ApiKeyItem struct {
 	ID        uint64 `json:"id"`

@@ -39,10 +39,15 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 	r.POST("/api/xhl/captcha", middleware.AuthUser(cfg.JWT.Secret), h.GenSlideCaptcha)
 	r.POST("/api/xhl/captcha/verify", middleware.AuthUser(cfg.JWT.Secret), h.VerifySlideCaptcha)
 
+	// 贴吧「设置虚拟形象」（用户端，需登录）：form 提交 ck + 图片，**设置成功才扣费**
+	r.POST("/api/xhl/figure/set", middleware.AuthUser(cfg.JWT.Secret), h.XhlFigureSet)
+
 	// 第三方开放接口（API Key 鉴权，xhlkey 请求头；明文 JSON，按 key 所属项目）
 	r.POST("/api/open/qrlogin", middleware.AuthApiKey(), h.OpenQrLogin)
 	// BDUSS → 网盘 cookie（仅项目 100001 的 API Key 可调用）
 	r.POST("/api/open/netdisk-cookie", middleware.AuthApiKey(), h.OpenNetdiskCookie)
+	// 贴吧「设置虚拟形象」（开放平台）：form 提交 ck + 图片，**设置成功才扣积分**
+	r.POST("/api/open/figure/set", middleware.AuthApiKey(), h.OpenFigureSet)
 
 	// fdev 签发服务（项目 100004 的 API Key 专用）：出加密包 + 服务端解密。
 	// FB 只留服务端，永不下发；handle 与创建它的 API Key 绑定、解密成功后即失效。

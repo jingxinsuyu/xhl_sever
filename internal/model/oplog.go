@@ -7,6 +7,7 @@ const (
 	CallActionQrLogin   = "qrlogin"    // 扫码确认
 	CallActionNetdisk   = "netdisk"    // BDUSS 转网盘 cookie
 	CallActionCheckScan = "check-scan" // 扫码前账号检测
+	CallActionFigureSet = "figure-set" // 贴吧虚拟形象设置
 )
 
 // 调用来源（call_log.source）
