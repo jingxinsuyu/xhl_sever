@@ -120,6 +120,17 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 		admin.GET("/projects/:id/billing-logs", middleware.AuthAdmin(cfg.JWT.Secret), h.ListProjectBillingLogs)
 		admin.GET("/projects/:id/stats", middleware.AuthAdmin(cfg.JWT.Secret), h.GetProjectStats)
 
+		// 代理（代理商档案，**不是登录账号**）+ 代理卡按类型单价 + 勾选结算
+		admin.GET("/projects/:id/agents", middleware.AuthAdmin(cfg.JWT.Secret), h.ListAgents)
+		admin.POST("/projects/:id/agents", middleware.AuthAdmin(cfg.JWT.Secret), h.CreateAgent)
+		admin.PUT("/agents/:id", middleware.AuthAdmin(cfg.JWT.Secret), h.UpdateAgent)
+		admin.DELETE("/agents/:id", middleware.AuthAdmin(cfg.JWT.Secret), h.DeleteAgent)
+		admin.GET("/agents/:id/prices", middleware.AuthAdmin(cfg.JWT.Secret), h.ListAgentPrices)
+		admin.PUT("/agents/:id/prices", middleware.AuthAdmin(cfg.JWT.Secret), h.SaveAgentPrices)
+		admin.GET("/agents/:id/stats", middleware.AuthAdmin(cfg.JWT.Secret), h.AgentStats)
+		admin.GET("/agents/:id/settlements", middleware.AuthAdmin(cfg.JWT.Secret), h.ListSettlements)
+		admin.POST("/cards/settle", middleware.AuthAdmin(cfg.JWT.Secret), h.SettleCards)
+
 		// 版本管理（按项目）
 		admin.GET("/projects/:id/versions", middleware.AuthAdmin(cfg.JWT.Secret), h.ListVersions)
 		admin.POST("/projects/:id/versions", middleware.AuthAdmin(cfg.JWT.Secret), h.UploadVersion)

@@ -395,10 +395,23 @@ func (h *Handler) GetProjectStats(c *gin.Context) {
 		for _, r := range sums {
 			cost[r.Kind] = r.Sum
 		}
+
+		// 兑换次数：本项目「已被兑换」的卡密数（card.used_at 非空，兑换时写入）
+		var redeem int64
+		rq := database.DB.Model(&model.Card{}).
+			Where("project_id = ? AND used_at IS NOT NULL", projectID)
+		if !fromT.IsZero() {
+			rq = rq.Where("used_at >= ?", fromT)
+		}
+		if !toT.IsZero() {
+			rq = rq.Where("used_at < ?", toT)
+		}
+		rq.Count(&redeem)
+
 		return gin.H{
 			"calls": a.Total, "ok": a.Ok, "fail": a.Total - a.Ok,
 			"active_users": a.Users, "credits": cost[model.CardKindCredits],
-			"calls_cost": cost[model.CardKindCalls],
+			"calls_cost": cost[model.CardKindCalls], "redeem": redeem,
 		}
 	}
 
@@ -429,11 +442,30 @@ func (h *Handler) GetProjectStats(c *gin.Context) {
 	for _, r := range rows {
 		byDay[r.D] = r
 	}
+
+	// 近 N 天每日兑换次数
+	type redeemRow struct {
+		D      string
+		Redeem int64
+	}
+	var rrows []redeemRow
+	database.DB.Model(&model.Card{}).
+		Select("DATE_FORMAT(used_at, '%Y-%m-%d') AS d, COUNT(*) AS redeem").
+		Where("project_id = ? AND used_at IS NOT NULL AND used_at >= ?", projectID, from).
+		Group("d").Order("d ASC").Scan(&rrows)
+	redeemByDay := map[string]int64{}
+	for _, r := range rrows {
+		redeemByDay[r.D] = r.Redeem
+	}
+
 	series := make([]gin.H, 0, days)
 	for i := 0; i < days; i++ {
 		d := from.AddDate(0, 0, i).Format("2006-01-02")
 		r := byDay[d]
-		series = append(series, gin.H{"date": d, "calls": r.Total, "ok": r.Ok, "fail": r.Total - r.Ok})
+		series = append(series, gin.H{
+			"date": d, "calls": r.Total, "ok": r.Ok, "fail": r.Total - r.Ok,
+			"redeem": redeemByDay[d],
+		})
 	}
 
 	// 卡密 / key / 版本数量（项目概览用）
