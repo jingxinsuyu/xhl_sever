@@ -1,0 +1,46 @@
+# ===== 敏感配置（含密钥，严禁入库）=====
+# 本地/开发配置（含容器内挂载的线上配置）
+config.yaml
+# 部署脚本（内含服务器 SSH 密码）
+deploy.py
+deploy_*.py
+
+# ===== 本地临时脚本 / 缓存 =====
+_*.py
+_*.sql
+_uid.txt
+_seed*.html
+__pycache__/
+
+# ===== 编译产物 =====
+xhl_sever-linux
+*.exe
+# 根目录前端构建产物（前端源码在 xhl-admin 仓库，不在此库跟踪）
+/web/
+
+# ===== 运行时数据 =====
+uploads/
+# 迁移快照备份
+project_id_migration_backup_*.json
+# 注意：captcha_assets/ 在 v2 里**要入库**（背景图就 27KB，且代码和测试都依赖它，
+# 漏了它滑动验证码会在运行期报"素材加载失败"，v1 就是靠手工上传才没出事）。
+
+# ===== 需求/提示词文档（不入库）=====
+/*.md
+!README.md
+!DEPLOY.md
+!API.md
+!OPEN_API.md
+!FDEV_API.md
+!SLIDE_CAPTCHA.md
+!设计文档_v2.md
+!部署手册_v2.md
+!改造方案_项目化.md
+
+# ===== 本地/工具设置 =====
+.claude/settings.local.json
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
