@@ -8,9 +8,13 @@ deploy_*.py
 # ===== 本地临时脚本 / 缓存 =====
 _*.py
 _*.sql
+_*.log
+_*.txt
 _uid.txt
 _seed*.html
 __pycache__/
+_v2dev*.exe*
+_fig_client_check.png
 
 # ===== 编译产物 =====
 xhl_sever-linux

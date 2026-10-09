@@ -39,9 +39,24 @@ func (h *Handler) UserInit(c *gin.Context) {
 		return
 	}
 	ent := getEntitlement(claims.UserID, pid)
-	if ent == nil || !ent.IsValid(timeNow()) {
-		util.Fail(c, util.CodeMembershipExpired, "会员已过期，无法登录")
+	mode := projectMode(pid, ent)
+	unit := projectUnit(pid)
+	// 会员/额度校验按【项目生效模式】判断（与 /api/user/login、/api/xhl/figure/set 一致）：
+	//   · membership：只看有效期
+	//   · per_call / credits：看剩余次数 / 积分
+	// 以前这里只认 expires_at，导致按次项目的用户一进主界面就被判"会员已过期"。
+	if mode == model.BillingMembership {
+		if ent == nil || !ent.IsValid(timeNow()) {
+			util.Fail(c, util.CodeMembershipExpired, "会员已过期，无法登录")
+			return
+		}
+	} else if ent == nil || !ent.CanConsume(mode, unit, timeNow()) {
+		util.Fail(c, util.CodeQuotaExhausted, modeLabel(mode)+"额度不足，请先充值")
 		return
+	}
+	remainingCalls, credits := 0, 0
+	if ent != nil {
+		remainingCalls, credits = ent.RemainingCalls, ent.Credits
 	}
 	util.OK(c, gin.H{
 		"username":          claims.Username,
@@ -49,5 +64,9 @@ func (h *Handler) UserInit(c *gin.Context) {
 		"has_time":          true,
 		"expires_at":        formatTimePtr(&ent.ExpiresAt),
 		"today_login_count": h.todayLoginCount(pid, claims.UserID),
+		// v2 追加计费模式与余额，供新客户端按模式展示（老客户端读不到就当没有）
+		"billing_mode":    mode,
+		"remaining_calls": remainingCalls,
+		"credits":         credits,
 	})
 }
