@@ -189,9 +189,11 @@ func clampInt(v, lo, hi int) int {
 	return v
 }
 
-// loginRecordsSign 签名票据：base64url(payload) + "." + hex(hmacSHA256(secret, base64url(payload))).
-func loginRecordsSign(secret string, t loginRecordsTicket) (string, error) {
-	raw, err := json.Marshal(t)
+// ticketSign 通用票据签名（payload 为任意可 JSON 序列化的载荷）。
+// 签名格式：base64url(json(payload)) + "." + hex(HMAC_SHA256(secret, base64url(payload)))。
+// 抽出来是为了让「贴吧状态查询」等同类接口复用同一套票据实现，避免各写一份签名代码走偏。
+func ticketSign(secret string, payload any) (string, error) {
+	raw, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
 	}
@@ -201,8 +203,8 @@ func loginRecordsSign(secret string, t loginRecordsTicket) (string, error) {
 	return body + "." + hex.EncodeToString(mac.Sum(nil)), nil
 }
 
-// loginRecordsVerify 校验票据签名（常数时间比较）并解析载荷。
-func loginRecordsVerify(secret, ticket string) (*loginRecordsTicket, error) {
+// ticketVerifyRaw 通用票据验签（常数时间比较），返回票据里的原始 JSON 载荷。
+func ticketVerifyRaw(secret, ticket string) ([]byte, error) {
 	parts := strings.Split(strings.TrimSpace(ticket), ".")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return nil, errors.New("票据格式错误")
@@ -215,6 +217,20 @@ func loginRecordsVerify(secret, ticket string) (*loginRecordsTicket, error) {
 	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
 		return nil, errors.New("票据载荷损坏")
+	}
+	return raw, nil
+}
+
+// loginRecordsSign 签名票据：base64url(payload) + "." + hex(hmacSHA256(secret, base64url(payload))).
+func loginRecordsSign(secret string, t loginRecordsTicket) (string, error) {
+	return ticketSign(secret, t)
+}
+
+// loginRecordsVerify 校验票据签名（常数时间比较）并解析载荷。
+func loginRecordsVerify(secret, ticket string) (*loginRecordsTicket, error) {
+	raw, err := ticketVerifyRaw(secret, ticket)
+	if err != nil {
+		return nil, err
 	}
 	var t loginRecordsTicket
 	if err := json.Unmarshal(raw, &t); err != nil {

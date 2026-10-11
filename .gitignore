@@ -53,3 +53,4 @@ Thumbs.db
 
 # 本地导出的预览图(客户端预览画布,不属于服务端仓库)
 _*.png
+!TIEBA_STATUS_API.md

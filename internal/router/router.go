@@ -48,6 +48,12 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 	r.POST("/api/xhl/login-records/prepare", middleware.AuthUser(cfg.JWT.Secret), h.XhlLoginRecordsPrepare)
 	r.POST("/api/xhl/login-records/report", middleware.AuthUser(cfg.JWT.Secret), h.XhlLoginRecordsReport)
 
+	// 「贴吧状态查询器」（用户端，需登录）：同样**服务端不产生上游流量**。
+	// /prepare 下发短时效一次性授权票据（含上游拼装指令、字段映射与单位换算、错误码释义，
+	// 协议来自 config.tieba_status）；/report 由客户端回报本机执行结果（会员制：不按次扣费）。
+	r.POST("/api/xhl/tieba-status/prepare", middleware.AuthUser(cfg.JWT.Secret), h.XhlTiebaStatusPrepare)
+	r.POST("/api/xhl/tieba-status/report", middleware.AuthUser(cfg.JWT.Secret), h.XhlTiebaStatusReport)
+
 	// 第三方开放接口（API Key 鉴权，xhlkey 请求头；明文 JSON，按 key 所属项目）
 	r.POST("/api/open/qrlogin", middleware.AuthApiKey(), h.OpenQrLogin)
 	// BDUSS → 网盘 cookie（仅项目 100001 的 API Key 可调用）

@@ -10,6 +10,8 @@ const (
 	CallActionFigureSet = "figure-set" // 贴吧虚拟形象设置
 	// CallActionLoginRecords 登录记录查询：服务端只发指令+计费，客户端用本机 IP 直连上游。
 	CallActionLoginRecords = "login-records"
+	// CallActionTiebaStatus 贴吧状态查询（吧龄/发帖数/发言数）：同上，服务端只授权与计费。
+	CallActionTiebaStatus = "tieba-status"
 )
 
 // 调用来源（call_log.source）

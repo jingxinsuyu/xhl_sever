@@ -90,6 +90,39 @@ login_records:
   # 可选上游密钥片段（以 ${UPSTREAM_KEY} 注入下发的 query/headers）；百度登录记录接口不需要，留空
   upstream_key: ""
 
+# 「贴吧状态查询器」协议下发配置（详见 TIEBA_STATUS_API.md）。
+# 与 login_records 同一套架构：服务端不代发上游请求（出口 IP 会被贴吧风控），
+# 只下发「上游拼装指令 + 字段映射（吧龄/发帖数/发言数的路径与单位换算）+ 错误码释义」，
+# 客户端拿票据后用**本机 IP**直连上游，再回报结果（会员制：不按次扣费）。
+tieba_status:
+  # 上游地址；留空 = 内置 https://tieba.baidu.com/home/get/panel
+  upstream_url: ""
+  method: "GET"
+  # 附加 query（值里 ${UN}=用户名、${RED_TAG}=10 位随机数、${TS_MS}=毫秒时间戳）
+  query: {}
+  # 附加请求头（${CK}=调用方 ck、${UN}=用户名、${UPSTREAM_KEY}=下面那条）
+  headers: {}
+  # 上游 UA；留空 = 内置照抓包 WebUA
+  user_agent: ""
+  timeout_seconds: 15
+  # 视为「查到贴吧状态」的上游 no；留空 = [0]
+  success_codes: []
+  # 票据 HMAC 密钥（**务必修改**）；留空回退 security.client_sign_salt
+  ticket_secret: "CHANGE_ME"
+  # 票据有效期（秒，10..600）
+  ticket_ttl_seconds: 120
+  # 可选上游密钥片段；贴吧 home/get/panel 公开接口不需要，留空
+  upstream_key: ""
+  # 字段映射（点分路径）
+  age_field: "data.tb_age"             # 吧龄
+  post_field: "data.post_num"          # 发帖数
+  comment_field: "data.followed_count" # 发言数
+  # 吧龄原始单位：year（默认）/ day；day 时下发 factor = 1 / days_per_year
+  age_unit: "year"
+  days_per_year: 365
+  # 上游 no/errno → 中文状态释义（留空 = 内置表）
+  error_codes: {}
+
 super_admin:
   username: "CHANGE_ME"
   password: "CHANGE_ME"

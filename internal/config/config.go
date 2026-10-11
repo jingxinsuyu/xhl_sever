@@ -123,6 +123,51 @@ type LoginRecords struct {
 	UpstreamKey string `yaml:"upstream_key"`
 }
 
+// TiebaStatus 「贴吧状态查询器」的**协议下发**配置（服务端只发指令，客户端用本机 IP 直连上游）。
+//
+// 与 LoginRecords 同一套架构与理由（见 LOGIN_RECORDS_API.md 第 0 节）：
+// 上游是贴吧的公开主页接口 `home/get/panel`，**不需要任何共享密钥**，
+// 所以本段唯一的价值是「上游域名/参数/字段路径/单位换算/错误码释义可热换」——
+// 上游改了只改配置重启，老客户端不用重新发版。
+//
+// 诚实边界：本段的值会随票据下发到客户端，**它不是对客户端保密的密钥**；
+// 唯一凭据是调用方自己的 ck（只以 sha256 指纹进票据，不落库、不写日志）。
+type TiebaStatus struct {
+	// UpstreamURL 上游查询地址（留空用内置 https://tieba.baidu.com/home/get/panel）。
+	UpstreamURL string `yaml:"upstream_url"`
+	// Method 上游 method，留空 GET。
+	Method string `yaml:"method"`
+	// Query 附加 query 参数；值里 ${UN} = 用户名、${RED_TAG} = 10 位随机数、${TS_MS} = 毫秒时间戳。
+	Query map[string]string `yaml:"query"`
+	// Headers 附加请求头；值里 ${CK} 替换成调用方 ck、${UN} 替换成用户名、${UPSTREAM_KEY} 替换成 upstream_key。
+	Headers map[string]string `yaml:"headers"`
+	// UserAgent 上游 UA（留空用内置照抓包 WebUA）。
+	UserAgent string `yaml:"user_agent"`
+	// TimeoutSeconds 客户端执行上游请求的建议超时（秒，默认 15）。
+	TimeoutSeconds int `yaml:"timeout_seconds"`
+	// SuccessCodes 视为「查到贴吧状态」的上游 code（默认 [0]）——命中才允许扣费。
+	SuccessCodes []int `yaml:"success_codes"`
+	// TicketSecret 票据 HMAC 密钥；留空回退 security.client_sign_salt。轮换=改这里并重启。
+	TicketSecret string `yaml:"ticket_secret"`
+	// TicketTTLSeconds 票据有效期（秒，默认 120；上限 600）。
+	TicketTTLSeconds int `yaml:"ticket_ttl_seconds"`
+	// UpstreamKey 可选的上游密钥片段：非空时以 ${UPSTREAM_KEY} 注入到下发的 headers/query。
+	UpstreamKey string `yaml:"upstream_key"`
+
+	// AgeField 吧龄字段路径（点分，默认 data.tb_age）。
+	AgeField string `yaml:"age_field"`
+	// PostField 发帖数字段路径（点分，默认 data.post_num）。
+	PostField string `yaml:"post_field"`
+	// CommentField 发言数字段路径（点分，默认 data.followed_count）。
+	CommentField string `yaml:"comment_field"`
+	// AgeUnit 吧龄原始单位：year（年，默认）/ day（天）。下发时算好 factor 供客户端换算。
+	AgeUnit string `yaml:"age_unit"`
+	// DaysPerYear 天→年换算基准（默认 365），仅 AgeUnit=day 时用到。
+	DaysPerYear int `yaml:"days_per_year"`
+	// ErrorCodes 上游 no/errno → 中文状态释义（留空用内置表）。
+	ErrorCodes map[string]string `yaml:"error_codes"`
+}
+
 // Config 全局配置
 type Config struct {
 	Server       Server       `yaml:"server"`
@@ -136,6 +181,7 @@ type Config struct {
 	Log          Log          `yaml:"log"`
 	Tieba        Tieba        `yaml:"tieba"`
 	LoginRecords LoginRecords `yaml:"login_records"`
+	TiebaStatus  TiebaStatus  `yaml:"tieba_status"`
 
 	// BaseDir 配置文件所在目录（软件根目录），供相对路径（如 upload.dir）解析基准，不来自 yaml。
 	BaseDir string `yaml:"-"`
