@@ -422,10 +422,16 @@ func (h *Handler) GetProjectStats(c *gin.Context) {
 	last7Agg := aggOf(weekStart, time.Time{})
 	allAgg := aggOf(time.Time{}, time.Time{})
 
-	// 用户数（该项目有会员或绑定的用户）
-	var entUsers, bindUsers int64
+	// 用户数（该项目有会员或绑定的用户，**两表 union 去重**）
+	// 注意：不能用 entUsers + bindUsers —— 同一个用户通常两表各有一行，相加会正好翻倍。
+	var entUsers, bindUsers, users int64
 	database.DB.Model(&model.UserEntitlement{}).Where("project_id = ? AND user_id > 0", projectID).Count(&entUsers)
 	database.DB.Model(&model.UserBinding{}).Where("project_id = ? AND user_id > 0", projectID).Count(&bindUsers)
+	database.DB.Raw("SELECT COUNT(*) FROM ("+
+		"SELECT user_id FROM user_entitlement WHERE project_id = ? AND user_id > 0"+
+		" UNION "+
+		"SELECT user_id FROM user_binding WHERE project_id = ? AND user_id > 0"+
+		") t", projectID, projectID).Scan(&users)
 
 	// 近 N 天趋势
 	type dayRow struct {
@@ -482,7 +488,7 @@ func (h *Handler) GetProjectStats(c *gin.Context) {
 		"last7":     last7Agg,
 		"total":     allAgg,
 		"counts": gin.H{
-			"users": entUsers + bindUsers, "entitlement_users": entUsers, "bound_users": bindUsers,
+			"users": users, "entitlement_users": entUsers, "bound_users": bindUsers,
 			"cards": cardCount, "card_types": cardTypeCount, "keys": keyCount, "versions": versionCount,
 		},
 		"series": series,
