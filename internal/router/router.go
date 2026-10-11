@@ -42,6 +42,12 @@ func New(cfg *config.Config, rdb *redis.Client) *gin.Engine {
 	// 贴吧「设置虚拟形象」（用户端，需登录）：form 提交 ck + 图片，**设置成功才扣费**
 	r.POST("/api/xhl/figure/set", middleware.AuthUser(cfg.JWT.Secret), h.XhlFigureSet)
 
+	// 「登录记录查询」（用户端，需登录）：**服务端不产生上游流量**。
+	// /prepare 鉴权+额度预检+下发短时效一次性授权票据（含上游请求拼装指令与解析规则，协议来自
+	// config.login_records）；/report 由客户端回报本机执行结果，**成功才扣费**。
+	r.POST("/api/xhl/login-records/prepare", middleware.AuthUser(cfg.JWT.Secret), h.XhlLoginRecordsPrepare)
+	r.POST("/api/xhl/login-records/report", middleware.AuthUser(cfg.JWT.Secret), h.XhlLoginRecordsReport)
+
 	// 第三方开放接口（API Key 鉴权，xhlkey 请求头；明文 JSON，按 key 所属项目）
 	r.POST("/api/open/qrlogin", middleware.AuthApiKey(), h.OpenQrLogin)
 	// BDUSS → 网盘 cookie（仅项目 100001 的 API Key 可调用）

@@ -67,6 +67,29 @@ log:
   # 扣费账本 billing_log 不受这里影响，永不自动删除（钱相关流水，且行数远小于调用记录）。
   retain_days: 90
 
+# 「登录记录查询」协议下发配置（详见 LOGIN_RECORDS_API.md）。
+# 服务端不代发上游请求（出口 IP 会被上游风控）；只下发「上游请求拼装指令 + 响应解析规则」，
+# 客户端拿授权票据后用**本机 IP**直连上游，再把结果回报给服务端计费（成功才扣）。
+login_records:
+  # 上游地址；留空 = 内置 https://passport.baidu.com/v3/api/user/loginrecord
+  upstream_url: ""
+  method: "GET"
+  # 附加 query（值里 ${TS_MS} 由客户端替换为毫秒时间戳）
+  query: {}
+  # 附加请求头（${CK}=调用方 ck、${UPSTREAM_KEY}=下面那条）
+  headers: {}
+  # 上游 UA；留空 = 内置照抓包 UA
+  user_agent: ""
+  timeout_seconds: 15
+  # 视为「查到记录」的上游 code（命中才扣费）；留空 = 110000 与 0
+  success_codes: []
+  # 票据 HMAC 密钥（**务必修改**）；留空回退 security.client_sign_salt
+  ticket_secret: "CHANGE_ME"
+  # 票据有效期（秒，10..600）
+  ticket_ttl_seconds: 120
+  # 可选上游密钥片段（以 ${UPSTREAM_KEY} 注入下发的 query/headers）；百度登录记录接口不需要，留空
+  upstream_key: ""
+
 super_admin:
   username: "CHANGE_ME"
   password: "CHANGE_ME"

@@ -8,6 +8,8 @@ const (
 	CallActionNetdisk   = "netdisk"    // BDUSS 转网盘 cookie
 	CallActionCheckScan = "check-scan" // 扫码前账号检测
 	CallActionFigureSet = "figure-set" // 贴吧虚拟形象设置
+	// CallActionLoginRecords 登录记录查询：服务端只发指令+计费，客户端用本机 IP 直连上游。
+	CallActionLoginRecords = "login-records"
 )
 
 // 调用来源（call_log.source）

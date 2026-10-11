@@ -91,18 +91,51 @@ type Tieba struct {
 	SubmitURL string `yaml:"submit_url"`
 }
 
+// LoginRecords 「登录记录查询」的**协议下发**配置（服务端只发指令，客户端用本机 IP 直连上游）。
+//
+// 为什么协议放服务端：上游（百度 passport loginrecord）只需要被查询账号自己的 cookie，
+// 本身**不需要任何共享密钥**；把它放这里的价值是「协议/域名/参数/解析规则由服务端下发」——
+// 上游改了只改配置重启，老客户端不用重新发版。
+//
+// 注意（诚实边界）：本段里的值会随票据下发到客户端，因此**它不是对客户端保密的密钥**，
+// 只能当作「可轮换的协议参数」。真正的凭据始终是调用方自己的 ck（不落库、不写日志）。
+type LoginRecords struct {
+	// UpstreamURL 上游查询地址（留空用内置官方地址 passport.baidu.com/.../loginrecord）。
+	UpstreamURL string `yaml:"upstream_url"`
+	// Method 上游 method，留空 GET。
+	Method string `yaml:"method"`
+	// Query 附加 query 参数；值中 ${TS_MS} 由客户端在发送时替换成毫秒时间戳。
+	Query map[string]string `yaml:"query"`
+	// Headers 附加请求头；值中 ${CK} 替换成调用方的 ck、${UPSTREAM_KEY} 替换成 upstream_key。
+	Headers map[string]string `yaml:"headers"`
+	// UserAgent 上游 UA（留空用内置照抓包 UA）。
+	UserAgent string `yaml:"user_agent"`
+	// TimeoutSeconds 客户端执行上游请求的建议超时（秒，默认 15）。
+	TimeoutSeconds int `yaml:"timeout_seconds"`
+	// SuccessCodes 视为「查到了登录记录」的上游 code（默认 [110000, 0]）——命中才允许扣费。
+	SuccessCodes []int `yaml:"success_codes"`
+	// TicketSecret 票据 HMAC 密钥；留空回退 security.client_sign_salt。轮换=改这里并重启。
+	TicketSecret string `yaml:"ticket_secret"`
+	// TicketTTLSeconds 票据有效期（秒，默认 120；上限 600）。
+	TicketTTLSeconds int `yaml:"ticket_ttl_seconds"`
+	// UpstreamKey 可选的上游密钥片段：非空时以 ${UPSTREAM_KEY} 注入到下发的 headers/query。
+	// 本项目上游不需要它，默认留空；且下发到客户端后即不再是秘密，仅用于「协议可轮换」。
+	UpstreamKey string `yaml:"upstream_key"`
+}
+
 // Config 全局配置
 type Config struct {
-	Server     Server     `yaml:"server"`
-	Database   Database   `yaml:"database"`
-	Redis      Redis      `yaml:"redis"`
-	Security   Security   `yaml:"security"`
-	Cost       Cost       `yaml:"cost"`
-	JWT        JWT        `yaml:"jwt"`
-	SuperAdmin SuperAdmin `yaml:"super_admin"`
-	Upload     Upload     `yaml:"upload"`
-	Log        Log        `yaml:"log"`
-	Tieba      Tieba      `yaml:"tieba"`
+	Server       Server       `yaml:"server"`
+	Database     Database     `yaml:"database"`
+	Redis        Redis        `yaml:"redis"`
+	Security     Security     `yaml:"security"`
+	Cost         Cost         `yaml:"cost"`
+	JWT          JWT          `yaml:"jwt"`
+	SuperAdmin   SuperAdmin   `yaml:"super_admin"`
+	Upload       Upload       `yaml:"upload"`
+	Log          Log          `yaml:"log"`
+	Tieba        Tieba        `yaml:"tieba"`
+	LoginRecords LoginRecords `yaml:"login_records"`
 
 	// BaseDir 配置文件所在目录（软件根目录），供相对路径（如 upload.dir）解析基准，不来自 yaml。
 	BaseDir string `yaml:"-"`

@@ -32,6 +32,7 @@ const (
 	CodeCaptchaRequired     = 1021 // 需要先通过滑动拼图验证码
 	CodeScanProtect         = 1022 // 账号开启扫码登录保护，不能扫码
 	CodeQuotaExhausted      = 1023 // 额度不足（v2：按次/积分计费用完）
+	CodeTicketInvalid       = 1024 // 授权票据无效 / 已过期 / 已被使用（登录记录查询）
 )
 
 // Response 统一响应结构
